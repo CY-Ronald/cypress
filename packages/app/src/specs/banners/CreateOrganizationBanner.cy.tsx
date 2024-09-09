@@ -3,6 +3,8 @@ import CreateOrganizationBanner from './CreateOrganizationBanner.vue'
 import { TrackedBanner_RecordBannerSeenDocument } from '../../generated/graphql'
 
 describe('<CreateOrganizationBanner />', () => {
+  const cohortOption = { cohort: '', value: defaultMessages.specPage.banners.createOrganization.title }
+
   it('should render expected content', () => {
     const linkHref = 'http://dummy.cypress.io/organizations/create'
 
@@ -12,7 +14,7 @@ describe('<CreateOrganizationBanner />', () => {
       cloudOrganizationsUrl: linkHref,
     } as any
 
-    cy.mount({ render: () => <CreateOrganizationBanner modelValue={true} /> })
+    cy.mount({ render: () => <CreateOrganizationBanner hasBannerBeenShown={true} cohortOption={cohortOption}/> })
 
     cy.contains(defaultMessages.specPage.banners.createOrganization.title).should('be.visible')
     cy.contains(defaultMessages.specPage.banners.createOrganization.content).should('be.visible')
@@ -25,22 +27,32 @@ describe('<CreateOrganizationBanner />', () => {
     cy.percySnapshot()
   })
 
-  it('should record expected event on mount', () => {
-    const recordEvent = cy.stub().as('recordEvent')
+  context('events', () => {
+    beforeEach(() => {
+      const recordEvent = cy.stub().as('recordEvent')
 
-    cy.stubMutationResolver(TrackedBanner_RecordBannerSeenDocument, (defineResult, event) => {
-      recordEvent(event)
+      cy.stubMutationResolver(TrackedBanner_RecordBannerSeenDocument, (defineResult, event) => {
+        recordEvent(event)
 
-      return defineResult({ recordEvent: true })
+        return defineResult({ recordEvent: true })
+      })
     })
 
-    cy.mount({ render: () => <CreateOrganizationBanner modelValue={true} hasBannerBeenShown={false} /> })
+    it('should record expected event on mount', () => {
+      cy.mount({ render: () => <CreateOrganizationBanner hasBannerBeenShown={false} cohortOption={cohortOption}/> })
 
-    cy.get('@recordEvent').should('have.been.calledWith', {
-      campaign: 'Set up your organization',
-      medium: 'Specs Create Organization Banner',
-      messageId: Cypress.sinon.match.string,
-      cohort: null,
+      cy.get('@recordEvent').should('have.been.calledWith', {
+        campaign: 'Set up your organization',
+        medium: 'Specs Create Organization Banner',
+        messageId: Cypress.sinon.match.string,
+        cohort: null,
+      })
+    })
+
+    it('should not record event on mount if already shown', () => {
+      cy.mount({ render: () => <CreateOrganizationBanner hasBannerBeenShown={true} cohortOption={cohortOption}/> })
+
+      cy.get('@recordEvent').should('not.have.been.called')
     })
   })
 })

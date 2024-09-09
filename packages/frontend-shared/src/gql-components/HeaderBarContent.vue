@@ -1,9 +1,9 @@
 <template>
   <div
     data-cy="header-bar-content"
-    class="bg-white border-b border-b-gray-100 h-64px py-15px px-6"
+    class="bg-white border-b border-b-gray-100 h-[64px] py-[15px] px-6"
   >
-    <div class="flex h-full gap-12px items-center justify-between">
+    <div class="flex h-full gap-[12px] items-center justify-between">
       <div
         v-if="props.pageName"
         class="whitespace-nowrap"
@@ -12,14 +12,15 @@
       </div>
       <div
         v-else
-        class="flex font-medium text-gray-700 items-center children:leading-24px"
+        class="flex font-medium text-gray-700 items-center children:leading-[24px]"
+        role="banner"
       >
         <img
-          class="h-32px mr-18px w-32px"
+          class="h-[32px] mr-[18px] w-[32px]"
           src="../assets/logos/cypress-dark.png"
           alt="cypress"
         >
-        <nav>
+        <div>
           <ol>
             <li
               v-if="props.gql.isGlobalMode"
@@ -44,7 +45,7 @@
             <template v-if="currentProject?.title">
               <li
                 v-if="props.gql.isGlobalMode"
-                class="mx-2px align-middle inline-block"
+                class="mx-[2px] align-middle inline-block"
                 aria-hidden="true"
               >
                 <i-cy-chevron-right_x16 class="icon-dark-gray-200" />
@@ -62,7 +63,7 @@
                     placement="bottom"
                     class="inline-block"
                   >
-                    <span class="font-normal max-w-200px text-gray-500 inline-block truncate align-top">
+                    <span class="font-normal max-w-[200px] text-gray-500 inline-block truncate align-top">
                       ({{ currentProject.branch }})
                     </span>
                     <template #popper>
@@ -73,7 +74,7 @@
               </li>
               <template v-if="currentProject.currentTestingType">
                 <li
-                  class="mx-2px inline-block align-middle"
+                  class="mx-[2px] inline-block align-middle"
                   aria-hidden="true"
                 >
                   <i-cy-chevron-right_x16 class="icon-dark-gray-200" />
@@ -84,9 +85,12 @@
               </template>
             </template>
           </ol>
-        </nav>
+        </div>
       </div>
-      <div class="flex gap-6">
+      <nav
+        class="flex gap-6"
+        role="navigation"
+      >
         <TopNav
           :gql="props.gql"
           :show-browsers="props.showBrowsers"
@@ -94,34 +98,34 @@
           @clear-force-open="isForceOpenAllowed = false"
         >
           <template
-            v-if="userData"
+            v-if="userProjectStatusStore.user.isLoggedIn"
             #login-title
           >
             <UserAvatar
-              :email="userData?.email"
-              class="h-24px w-24px"
+              :email="userProjectStatusStore.userData?.email"
+              class="h-[24px] w-[24px]"
               data-cy="user-avatar-title"
             />
             <span class="sr-only">{{ t('topNav.login.profileMenuLabel') }}</span>
           </template>
           <template
-            v-if="userData"
+            v-if="userProjectStatusStore.userData"
             #login-panel
           >
             <div
-              class="min-w-248px"
+              class="min-w-[248px]"
               data-cy="login-panel"
             >
-              <div class="border-b flex border-b-gray-100 p-16px">
+              <div class="border-b flex border-b-gray-100 p-[16px]">
                 <UserAvatar
-                  :email="userData?.email"
-                  class="h-48px mr-16px w-48px"
+                  :email="userProjectStatusStore.userData?.email"
+                  class="h-[48px] mr-[16px] w-[48px]"
                   data-cy="user-avatar-panel"
                 />
                 <div>
-                  <span class="text-gray-800">{{ userData?.fullName }}</span>
+                  <span class="text-gray-800">{{ userProjectStatusStore.userData?.fullName }}</span>
                   <br>
-                  <span class="text-gray-600">{{ userData?.email }}</span>
+                  <span class="text-gray-600">{{ userProjectStatusStore.userData?.email }}</span>
                   <br>
                   <ExternalLink
                     href="https://on.cypress.io/dashboard/profile"
@@ -131,7 +135,7 @@
                 </div>
               </div>
 
-              <div class="p-16px">
+              <div class="p-[16px]">
                 <Auth
                   :gql="props.gql"
                   :show-logout="true"
@@ -141,25 +145,18 @@
             </div>
           </template>
         </TopNav>
-        <div v-if="!userData">
+        <div v-if="!userProjectStatusStore.user.isLoggedIn">
           <button
             class="flex text-gray-600 items-center group focus:outline-transparent"
-            @click="openLogin"
+            @click="userProjectStatusStore.openLoginConnectModal({ utmMedium: 'Nav' })"
           >
             <i-cy-profile_x16
-              class="h-16px mr-8px w-16px block icon-dark-gray-500 icon-light-gray-100 group-hocus:icon-dark-indigo-500 group-hocus:icon-light-indigo-50"
+              class="h-[16px] mr-[8px] w-[16px] block icon-dark-gray-500 icon-light-gray-100 group-hocus:icon-dark-indigo-500 group-hocus:icon-light-indigo-50"
             />
             <span class="font-medium whitespace-nowrap group-hocus:text-indigo-500">{{ t('topNav.login.actionLogin') }}</span>
           </button>
         </div>
-      </div>
-      <LoginModal
-        v-model="isLoginOpen"
-        :gql="props.gql"
-        utm-medium="Nav"
-        :show-connect-button-after-login="isApp && !cloudProjectId"
-        @connect-project="handleConnectProject"
-      />
+      </nav>
     </div>
   </div>
 </template>
@@ -173,7 +170,6 @@ import {
   HeaderBarContent_AuthChangeDocument,
 } from '../generated/graphql'
 import TopNav from './topnav/TopNav.vue'
-import LoginModal from './topnav/LoginModal.vue'
 import UserAvatar from './topnav/UserAvatar.vue'
 import Auth from './Auth.vue'
 import { useI18n } from '@cy/i18n'
@@ -182,6 +178,9 @@ import interval from 'human-interval'
 import { sortBy } from 'lodash'
 import Tooltip from '../components/Tooltip.vue'
 import type { AllowedState } from '@packages/types'
+import { useUserProjectStatusStore } from '../store/user-project-status-store'
+
+const userProjectStatusStore = useUserProjectStatusStore()
 
 gql`
 fragment HeaderBarContent_Auth on Query {
@@ -222,6 +221,10 @@ mutation GlobalPageHeader_clearCurrentProject {
     currentProject {
       id
     }
+    # This ensures the cache is updated with null after clearing project
+    migration {
+      configFileNameBefore
+    }
   }
 }
 `
@@ -243,10 +246,6 @@ fragment HeaderBar_HeaderBarContent on Query {
 }
 `
 
-const userData = computed(() => {
-  return props.gql.cloudViewer ?? props.gql.cachedUser
-})
-
 const savedState = computed(() => {
   return props.gql?.currentProject?.savedState as AllowedState
 })
@@ -257,12 +256,7 @@ const cloudProjectId = computed(() => {
   return props.gql?.currentProject?.config?.find((item: { field: string }) => item.field === 'projectId')?.value
 })
 
-const isLoginOpen = ref(false)
 const clearCurrentProjectMutation = useMutation(GlobalPageHeader_ClearCurrentProjectDocument)
-
-const openLogin = () => {
-  isLoginOpen.value = true
-}
 
 const clearCurrentProject = () => {
   if (currentProject.value) {
@@ -276,16 +270,6 @@ const props = defineProps<{
   pageName?: string
   allowAutomaticPromptOpen?: boolean
 }>()
-
-const emit = defineEmits<{
-  (event: 'connect-project'): void
-}>()
-
-const isApp = window.__Cypress__
-
-const handleConnectProject = () => {
-  emit('connect-project')
-}
 
 const { t } = useI18n()
 const prompts = sortBy([

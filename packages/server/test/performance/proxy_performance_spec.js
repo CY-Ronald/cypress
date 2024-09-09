@@ -21,8 +21,8 @@ const { createRoutes } = require(`../../lib/routes`)
 process.env.CYPRESS_INTERNAL_ENV = 'development'
 
 const CA = require('@packages/https-proxy').CA
-const Config = require('../../lib/config')
-const { ServerE2E } = require('../../lib/server-e2e')
+const { setupFullConfigWithDefaults } = require('@packages/config')
+const { ServerBase } = require('../../lib/server-base')
 const { SocketE2E } = require('../../lib/socket-e2e')
 const { _getArgs } = require('../../lib/browsers/chrome')
 
@@ -350,7 +350,7 @@ describe('Proxy Performance', function () {
           https: { cert, key },
         }).start(HTTPS_PROXY_PORT),
 
-        Config.setupFullConfigWithDefaults({
+        setupFullConfigWithDefaults({
           projectRoot: '/tmp/a',
           config: {
             supportFile: false,
@@ -361,7 +361,7 @@ describe('Proxy Performance', function () {
           // turn off morgan
           config.morgan = false
 
-          cyServer = new ServerE2E()
+          cyServer = new ServerBase()
 
           return cyServer.open(config, {
             SocketCtor: SocketE2E,
@@ -376,7 +376,7 @@ describe('Proxy Performance', function () {
 
   URLS_UNDER_TEST.map((urlUnderTest) => {
     // TODO: fix flaky tests https://github.com/cypress-io/cypress/issues/23214
-    describe.skip(urlUnderTest, function () {
+    describe(urlUnderTest, { retries: 15 }, function () {
       let baseline
       const testCases = _.cloneDeep(TEST_CASES)
 
@@ -414,6 +414,7 @@ describe('Proxy Performance', function () {
         debug(`Done in ${Math.round((new Date() / 1000) - start)}s`)
         process.stdout.write('Note: All times are in milliseconds.\n')
 
+        // eslint-disable-next-line no-console
         console.table(testCases)
 
         return Promise.map(testCases, (testCase) => {

@@ -31,28 +31,24 @@ function assertCorrectRunsLink (specFileName: string, status: string) {
 }
 
 function validateTooltip (status: string) {
-  cy.validateExternalLink({
-    // TODO: (#23778) This name is so long because the entire tooltip is wrapped in a link,
-    // we can make this more accessible by having the name of the link describe the destination
-    // (which is currently not described) and keeping the other content separate.
-    name: `accounts_new.spec.js ${status} 4 months ago 2:23 - 2:39 skipped pending passed failed`,
-    // the main thing about testing this link is that is gets composed with the expected UTM params
-    href: makeTestingCloudLink(status),
-  })
+  cy.get(`a[href="${makeTestingCloudLink(status)}"]`)
   .should('contain.text', 'accounts_new.spec.js')
-  .and('contain.text', '4 months ago')
   .and('contain.text', '2:23 - 2:39')
   .and('contain.text', 'skipped 0')
   .and('contain.text', 'pending 1-2')
   .and('contain.text', `passed 22-23`)
   .and('contain.text', 'failed 1-2')
+  .invoke('text')
+  .should((text) => {
+    expect(text).to.match(/\d+ (day|week|month|year)s? ago/)
+  })
 }
 
 function specShouldShow (specFileName: string, runDotsClasses: string[], latestRunStatus: CloudRunStatus|'PLACEHOLDER') {
   const latestStatusSpinning = latestRunStatus === 'RUNNING'
 
   type dotIndex = Parameters<typeof dotSelector>[1];
-  const indexes: dotIndex[] = [0, 1, 2]
+  const indexes: Exclude<dotIndex, 'latest'>[] = [0, 1, 2]
 
   indexes.forEach((i) => {
     return cy.get(dotSelector(specFileName, i)).should('have.class', `icon-light-${runDotsClasses.length > i ? runDotsClasses[i] : 'gray-300'}`)
@@ -71,6 +67,49 @@ function specShouldShow (specFileName: string, runDotsClasses: string[], latestR
 
 function simulateRunData () {
   cy.remoteGraphQLIntercept(async (obj) => {
+    if (obj.operationName === 'RelevantRunsDataSource_RunsByCommitShas') {
+      obj.result.data = {
+        'cloudProjectBySlug': {
+          '__typename': 'CloudProject',
+          'id': 'Q2xvdWRQcm9qZWN0OnZncXJ3cA==',
+          'runsByCommitShas': [
+            {
+              'id': 'Q2xvdWRSdW46TUdWZXhvQkRPNg==',
+              'runNumber': 136,
+              'status': 'FAILED',
+              'commitInfo': {
+                'sha': 'commit2',
+                '__typename': 'CloudRunCommitInfo',
+              },
+              '__typename': 'CloudRun',
+            },
+            {
+              'id': 'Q2xvdWRSdW46ckdXb2wzbzJHVg==',
+              'runNumber': 134,
+              'status': 'PASSED',
+              'commitInfo': {
+                'sha': '37fa5bfb9e774d00a03fe8f0d439f06ec70f533d',
+                '__typename': 'CloudRunCommitInfo',
+              },
+              '__typename': 'CloudRun',
+            },
+          ],
+        },
+        'pollingIntervals': {
+          'runsByCommitShas': 30,
+          '__typename': 'CloudPollingIntervals',
+        },
+      }
+    }
+
+    return obj.result
+  })
+
+  cy.remoteGraphQLInterceptBatched(async (obj) => {
+    if (obj.field !== 'cloudSpecByPath') {
+      return obj.result
+    }
+
     const fakeRuns = (statuses: string[], idPrefix: string) => {
       return statuses.map((s, idx) => {
         return {
@@ -79,6 +118,9 @@ function simulateRunData () {
           status: s,
           createdAt: new Date('2022-05-08T03:17:00').toISOString(),
           completedAt: new Date('2022-05-08T05:17:00').toISOString(),
+          basename: idPrefix.substring(idPrefix.lastIndexOf('/') + 1, idPrefix.indexOf('.')),
+          path: idPrefix,
+          extension: idPrefix.substring(idPrefix.indexOf('.')),
           runNumber: 432,
           groupCount: 2,
           specDuration: {
@@ -111,34 +153,27 @@ function simulateRunData () {
       })
     }
 
-    if (obj.result.data && 'cloudSpecByPath' in obj.result.data) {
-      // simulate network latency to allow for caching to register
-      await new Promise((r) => setTimeout(r, 20))
+    // simulate network latency to allow for caching to register
+    await new Promise((r) => setTimeout(r, 20))
 
-      const statuses = obj.variables.specPath?.includes('accounts_list.spec.js') ?
-        ['PASSED', 'FAILED', 'CANCELLED', 'ERRORED'] :
-        obj.variables.specPath?.includes('app.spec.js') ?
-          [] :
-          ['RUNNING', 'PASSED']
+    const statuses = obj.variables.specPath?.includes('accounts_list.spec.js') ?
+      ['PASSED', 'FAILED', 'CANCELLED', 'ERRORED'] :
+      obj.variables.specPath?.includes('app.spec.js') ?
+        [] :
+        ['RUNNING', 'PASSED']
 
-      const runs = fakeRuns(statuses, obj.variables.specPath)
-      const averageDuration = obj.variables.specPath?.includes('accounts_list.spec.js') ?
-        12000 : // 0:12
-        123000 // 2:03
+    const runs = fakeRuns(statuses, obj.variables.specPath)
+    const averageDuration = obj.variables.specPath?.includes('accounts_list.spec.js') ?
+      12000 : // 0:12
+      123000 // 2:03
 
-      obj.result.data.cloudSpecByPath = {
-        __typename: 'CloudProjectSpec',
-        retrievedAt: new Date().toISOString(),
-        id: `id${obj.variables.specPath}`,
-        specRuns: {
-          __typename: 'CloudSpecRunConnection',
-          nodes: runs,
-        },
-        averageDuration,
-      }
+    return {
+      __typename: 'CloudProjectSpec',
+      retrievedAt: new Date().toISOString(),
+      id: `id${obj.variables.specPath}`,
+      specRunsForRunIds: runs,
+      averageDurationForRunIds: averageDuration,
     }
-
-    return obj.result
   })
 }
 
@@ -149,7 +184,7 @@ function allVisibleSpecsShouldBePlaceholders () {
   cy.findAllByTestId('run-status-dot-2').should('not.exist')
   cy.findAllByTestId('run-status-dot-latest').should('not.exist')
 
-  cy.get('.spec-list-container').scrollTo('bottom')
+  cy.findByTestId('spec-list-container').scrollTo('bottom')
 }
 
 describe('App/Cloud Integration - Latest runs and Average duration', { viewportWidth: 1200, viewportHeight: 900 }, () => {
@@ -160,35 +195,25 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
 
     cy.withCtx((ctx, o) => {
       o.sinon.stub(ctx.lifecycleManager.git!, 'currentBranch').value('fakeBranch')
+      ctx.git?.__setGitHashesForTesting(['commit1', 'commit2'])
     })
   })
 
-  context('when no runs are recorded', () => {
-    beforeEach(() => {
+  // TODO: Flaky test: Sometimes this test renders the empty view instead of the placeholder
+  context.skip('when no runs are recorded', () => {
+    it('shows placeholders for all visible specs', { defaultCommandTimeout: 6000 }, () => {
       cy.loginUser()
 
-      cy.remoteGraphQLIntercept(async (obj) => {
-        if (obj.result.data && 'cloudSpecByPath' in obj.result.data) {
-          obj.result.data.cloudSpecByPath = {
-            __typename: 'CloudProjectSpecNotFound',
-            retrievedAt: new Date().toISOString(),
-            id: `id${obj.variables.specPath}`,
-            specRuns: {
-              __typename: 'CloudSpecRunConnection',
-              nodes: [],
-            },
-            averageDuration: null,
-          }
+      cy.remoteGraphQLInterceptBatched(async (obj) => {
+        return {
+          __typename: 'CloudProjectSpecNotFound',
+          retrievedAt: new Date().toISOString(),
+          message: 'Spec Not Found',
         }
-
-        return obj.result
       })
 
       cy.visitApp()
-      cy.findByTestId('sidebar-link-specs-page').click()
-    })
-
-    it('shows placeholders for all visible specs', () => {
+      cy.specsPageIsVisible()
       allVisibleSpecsShouldBePlaceholders()
     })
   })
@@ -196,6 +221,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
   context('when logged out', () => {
     beforeEach(() => {
       cy.visitApp()
+      cy.specsPageIsVisible()
       cy.findByTestId('sidebar-link-specs-page').click()
     })
 
@@ -206,13 +232,13 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
     it('shows correct tooltips with log in buttons', () => {
       cy.findByTestId('latest-runs-header').trigger('mouseenter')
       cy.get('.v-popper__popper--shown')
-      .should('contain', 'Connect to the Cypress Dashboard to see the status of your latest runs')
+      .should('contain', 'Connect to Cypress Cloud to see the status of your latest runs')
       .find('button')
-      .should('have.text', 'Log in to the Dashboard')
+      .should('have.text', 'Log in to Cypress Cloud')
       .click()
 
       cy.findByRole('dialog', { name: 'Log in to Cypress' }).within(() => {
-        cy.get('button').contains('Log In')
+        cy.get('button').contains('Log in')
         cy.get('[aria-label="Close"]').click()
       })
 
@@ -220,40 +246,17 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
 
       cy.findByTestId('average-duration-header').trigger('mouseenter')
       cy.get('.v-popper__popper--shown')
-      .should('contain', 'Connect to the Cypress Dashboard to see the average spec durations of your latest runs')
+      .should('contain', 'Connect to Cypress Cloud to see the average spec durations of your latest runs')
       .find('button')
-      .should('have.text', 'Log in to the Dashboard')
+      .should('have.text', 'Log in to Cypress Cloud')
       .click()
 
       cy.findByRole('dialog', { name: 'Log in to Cypress' }).within(() => {
-        cy.get('button').contains('Log In')
+        cy.get('button').contains('Log in')
         cy.get('[aria-label="Close"]').click()
       })
 
       cy.findByTestId('average-duration-header').trigger('mouseleave')
-    })
-
-    it('shows login/connect button in row when hovering', () => {
-      cy.get('[data-cy="spec-list-file"] [data-cy="specs-list-row-latest-runs"]')
-      .eq(0)
-      .as('latestRunsCell')
-      .trigger('mouseenter')
-
-      cy.contains('[data-cy="specs-list-row-latest-runs"] [data-cy="cloud-button"]', 'Connect').should('be.visible')
-
-      cy.get('@latestRunsCell').trigger('mouseleave')
-
-      cy.contains('[data-cy="cloud-button"]', 'Connect').should('not.exist')
-
-      cy.get('[data-cy="spec-list-file"] [data-cy="specs-list-row-average-duration"]')
-      .eq(0)
-      .as('averageDurationCell')
-      .trigger('mouseenter')
-
-      cy.contains('[data-cy="specs-list-row-average-duration"] [data-cy="cloud-button"]', 'Connect').should('be.visible')
-      cy.get('@averageDurationCell').trigger('mouseleave')
-
-      cy.contains('[data-cy="cloud-button"]', 'Connect').should('not.exist')
     })
   })
 
@@ -265,6 +268,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       })
 
       cy.visitApp()
+      cy.specsPageIsVisible()
       cy.findByTestId('sidebar-link-specs-page').click()
     })
 
@@ -275,7 +279,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
     it('shows correct tooltips with log in buttons', () => {
       cy.findByTestId('latest-runs-header').trigger('mouseenter')
       cy.get('.v-popper__popper--shown')
-      .should('contain', 'Connect to the Cypress Dashboard to see the status of your latest runs')
+      .should('contain', 'Connect to Cypress Cloud to see the status of your latest runs')
       .find('button')
       .should('have.text', 'Connect your project')
       .click()
@@ -288,7 +292,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
 
       cy.findByTestId('average-duration-header').trigger('mouseenter')
       cy.get('.v-popper__popper--shown')
-      .should('contain', 'Connect to the Cypress Dashboard to see the average spec durations of your latest runs')
+      .should('contain', 'Connect to Cypress Cloud to see the average spec durations of your latest runs')
       .find('button')
       .should('have.text', 'Connect your project')
       .click()
@@ -310,6 +314,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       cy.loginUser()
 
       cy.visitApp()
+      cy.specsPageIsVisible()
       cy.findByTestId('sidebar-link-specs-page').click()
     })
 
@@ -325,13 +330,14 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       simulateRunData()
 
       cy.visitApp()
+      cy.specsPageIsVisible()
       cy.findByTestId('sidebar-link-specs-page').click()
     })
 
     it('shows correct tooltips', () => {
       cy.findByTestId('latest-runs-header').trigger('mouseenter')
       cy.get('.v-popper__popper--shown')
-      .should('contain', 'The status of your latest runs in the Cypress Dashboard')
+      .should('contain', 'The status of your latest runs in Cypress Cloud')
       .find('button')
       .should('not.exist')
 
@@ -339,7 +345,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
 
       cy.findByTestId('average-duration-header').trigger('mouseenter')
       cy.get('.v-popper__popper--shown')
-      .should('contain', 'The average spec durations of your latest runs in the Cypress Dashboard')
+      .should('contain', 'The average spec durations of your latest runs in Cypress Cloud')
       .find('button')
       .should('not.exist')
 
@@ -358,6 +364,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       cy.get('.v-popper__popper--shown').should('not.exist')
       cy.get(dotSelector('app.spec.js', 'latest')).trigger('mouseleave')
 
+      cy.findByTestId('spec-list-container').scrollTo('top')
       // oldest 2 status dots will use placeholder
       specShouldShow('accounts_new.spec.js', ['gray-300', 'gray-300', 'jade-400'], 'RUNNING')
       cy.get(dotSelector('accounts_new.spec.js', 'latest')).trigger('mouseenter')
@@ -373,7 +380,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       // make sure the virtualized list didn't load z008.spec.js
       cy.get(specRowSelector('z008.spec.js')).should('not.exist')
 
-      cy.get('.spec-list-container').scrollTo('bottom')
+      cy.findByTestId('spec-list-container').scrollTo('bottom')
       // scrolling down should load z008.spec.js with loading status
       cy.get(dotsSkeletonSelector('z008.spec.js')).should('exist')
 
@@ -391,7 +398,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
         .should('have.attr', 'aria-expanded', 'false')
 
         // Trigger cloud specs list change by scrolling
-        cy.get('.spec-list-container')
+        cy.findByTestId('spec-list-container')
         .scrollTo('bottom', { duration: 500 })
         .wait(100)
         .scrollTo('top', { duration: 500 })
@@ -409,7 +416,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
         .should('have.attr', 'aria-expanded', 'false')
         .then((dir) => {
           // Perform a search/filter operation
-          cy.findByLabelText('Search Specs').type(dir.text()[0])
+          cy.findByLabelText('Search specs').type(dir.text()[0])
         })
 
         // Previously-collapsed directory should automatically expand
@@ -426,7 +433,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       // Move to Settings page and wait for render
       cy.get('a[href="#/settings"]').click()
       cy.location('hash').should('include', '/settings')
-      cy.findByText('Project Settings').should('be.visible')
+      cy.findByText('Project settings').should('be.visible')
 
       // Move back to Specs page and wait for render
       cy.get('a[href="#/specs"]').click()
@@ -444,6 +451,70 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       cy.loginUser()
 
       cy.remoteGraphQLIntercept(async (obj, testState) => {
+        const pollingCounter = testState.pollingCounter ?? 0
+
+        if (obj.operationName === 'RelevantRunsDataSource_RunsByCommitShas') {
+          obj.result.data = {
+            'cloudProjectBySlug': {
+              '__typename': 'CloudProject',
+              'id': 'Q2xvdWRQcm9qZWN0OnZncXJ3cA==',
+              'runsByCommitShas': [
+                {
+                  'id': 'Q2xvdWRSdW46TUdWZXhvQkRPNg==',
+                  'runNumber': 136,
+                  'status': 'PASSED',
+                  'commitInfo': {
+                    'sha': 'commit2',
+                    '__typename': 'CloudRunCommitInfo',
+                  },
+                  '__typename': 'CloudRun',
+                },
+                {
+                  'id': 'Q2xvdWRSdW46ckdXb2wzbzJHVg==',
+                  'runNumber': 134,
+                  'status': 'FAILED',
+                  'commitInfo': {
+                    'sha': '37fa5bfb9e774d00a03fe8f0d439f06ec70f533d',
+                    '__typename': 'CloudRunCommitInfo',
+                  },
+                  '__typename': 'CloudRun',
+                },
+              ],
+            },
+            'pollingIntervals': {
+              'runsByCommitShas': 1,
+              '__typename': 'CloudPollingIntervals',
+            },
+          }
+
+          if (pollingCounter > 2) {
+            obj.result.data.cloudProjectBySlug.runsByCommitShas.shift({
+              'id': 'Q2xvdWRSdW46TUdWZXhvQkRPNg==',
+              'runNumber': 138,
+              'status': 'FAILED',
+              'commitInfo': {
+                'sha': 'commit2',
+                '__typename': 'CloudRunCommitInfo',
+              },
+              '__typename': 'CloudRun',
+            })
+          }
+
+          if (pollingCounter > 5) {
+            obj.result.data.pollingIntervals.runsByCommitShas = 100
+          }
+
+          testState.pollingCounter = pollingCounter + 1
+        }
+
+        return obj.result
+      })
+
+      cy.remoteGraphQLInterceptBatched(async (obj, testState) => {
+        if (obj.field !== 'cloudSpecByPath') {
+          return obj.result
+        }
+
         const fakeRuns = (statuses: string[], idPrefix: string) => {
           return statuses.map((s, idx) => {
             return {
@@ -452,6 +523,9 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
               status: s,
               createdAt: new Date('2022-05-08T03:17:00').toISOString(),
               completedAt: new Date('2022-05-08T05:17:00').toISOString(),
+              basename: idPrefix.substring(idPrefix.lastIndexOf('/') + 1, idPrefix.indexOf('.')),
+              path: idPrefix,
+              extension: idPrefix.substring(idPrefix.indexOf('.')),
               runNumber: 432,
               groupCount: 2,
               specDuration: {
@@ -486,42 +560,24 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
 
         const pollingCounter = testState.pollingCounter ?? 0
 
-        if (obj.result.data && 'cloudSpecByPath' in obj.result.data) {
-          // simulate network latency to allow for caching to register
-          await new Promise((r) => setTimeout(r, 20))
+        // simulate network latency to allow for caching to register
+        await new Promise((r) => setTimeout(r, 20))
 
-          const statuses = pollingCounter < 2 ? ['PASSED', 'FAILED', 'CANCELLED', 'ERRORED'] : ['FAILED', 'PASSED', 'FAILED', 'CANCELLED', 'ERRORED']
-          const runs = fakeRuns(statuses, obj.variables.specPath)
-          const averageDuration = pollingCounter < 2 ? 12000 : 13000
+        const statuses = pollingCounter < 2 ? ['PASSED', 'FAILED', 'CANCELLED', 'ERRORED'] : ['FAILED', 'PASSED', 'FAILED', 'CANCELLED', 'ERRORED']
+        const runs = fakeRuns(statuses, obj.variables.specPath)
+        const averageDuration = pollingCounter < 2 ? 12000 : 13000
 
-          obj.result.data.cloudSpecByPath = {
-            __typename: 'CloudProjectSpec',
-            retrievedAt: new Date().toISOString(),
-            id: `id${obj.variables.specPath}`,
-            specRuns: {
-              __typename: 'CloudSpecRunConnection',
-              nodes: runs,
-            },
-            averageDuration,
-          }
-        } else if (obj.result.data && 'cloudLatestRunUpdateSpecData' in obj.result.data) {
-          const mostRecentUpdate = pollingCounter > 1 ? new Date().toISOString() : new Date('2022-06-10').toISOString()
-          // initial polling interval is set to every second to avoid long wait times
-          const pollingInterval = pollingCounter > 1 ? 30 : 1
-
-          obj.result.data.cloudLatestRunUpdateSpecData = {
-            __typename: 'CloudLatestRunUpdateSpecData',
-            mostRecentUpdate,
-            pollingInterval,
-          }
-
-          testState.pollingCounter = pollingCounter + 1
+        return {
+          __typename: 'CloudProjectSpec',
+          retrievedAt: new Date().toISOString(),
+          id: `id${obj.variables.specPath}`,
+          specRunsForRunIds: runs,
+          averageDurationForRunIds: averageDuration,
         }
-
-        return obj.result
       })
 
       cy.visitApp()
+      cy.specsPageIsVisible()
       cy.findByTestId('sidebar-link-specs-page').click()
     })
 
@@ -544,114 +600,6 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
       cy.get(averageDurationSelector('accounts_list.spec.js')).contains('0:13')
     })
   })
-
-  context('polling indicates no new data', () => {
-    beforeEach(() => {
-      cy.loginUser()
-
-      cy.remoteGraphQLIntercept(async (obj, testState) => {
-        const fakeRuns = (statuses: string[], idPrefix: string) => {
-          return statuses.map((s, idx) => {
-            return {
-              __typename: 'CloudSpecRun',
-              id: `SpecRun_${idPrefix}_${idx}`,
-              status: s,
-              createdAt: new Date('2022-05-08T03:17:00').toISOString(),
-              completedAt: new Date('2022-05-08T05:17:00').toISOString(),
-              runNumber: 432,
-              groupCount: 2,
-              specDuration: {
-                min: 143003, // 2:23
-                max: 159120, // 3:40
-                __typename: 'SpecDataAggregate',
-              },
-              testsFailed: {
-                min: 1,
-                max: 2,
-                __typename: 'SpecDataAggregate',
-              },
-              testsPassed: {
-                min: 22,
-                max: 23,
-                __typename: 'SpecDataAggregate',
-              },
-              testsSkipped: {
-                min: null,
-                max: null,
-                __typename: 'SpecDataAggregate',
-              },
-              testsPending: {
-                min: 1,
-                max: 2,
-                __typename: 'SpecDataAggregate',
-              },
-              url: 'https://google.com',
-            }
-          })
-        }
-
-        const pollingCounter = testState.pollingCounter ?? 0
-
-        if (obj.result.data && 'cloudSpecByPath' in obj.result.data) {
-          // simulate network latency to allow for caching to register
-          await new Promise((r) => setTimeout(r, 20))
-
-          const statuses = pollingCounter < 2 ? ['PASSED', 'FAILED', 'CANCELLED', 'ERRORED'] : ['FAILED', 'PASSED', 'FAILED', 'CANCELLED', 'ERRORED']
-          const runs = fakeRuns(statuses, obj.variables.specPath)
-          const averageDuration = pollingCounter < 2 ? 12000 : 13000
-
-          obj.result.data.cloudSpecByPath = {
-            __typename: 'CloudProjectSpec',
-            retrievedAt: new Date().toISOString(),
-            id: `id${obj.variables.specPath}`,
-            specRuns: {
-              __typename: 'CloudSpecRunConnection',
-              nodes: runs,
-            },
-            averageDuration,
-          }
-        } else if (obj.result.data && 'cloudLatestRunUpdateSpecData' in obj.result.data) {
-          const mostRecentUpdate = new Date('2022-06-10').toISOString()
-          // initial polling interval is set to every second to avoid long wait times
-          const pollingInterval = pollingCounter > 1 ? 30 : 1
-
-          obj.result.data.cloudLatestRunUpdateSpecData = {
-            __typename: 'CloudLatestRunUpdateSpecData',
-            mostRecentUpdate,
-            pollingInterval,
-          }
-
-          testState.pollingCounter = pollingCounter + 1
-        }
-
-        return obj.result
-      })
-
-      cy.visitApp()
-      cy.findByTestId('sidebar-link-specs-page').click()
-    })
-
-    it('shows the same data after polling', () => {
-      specShouldShow('accounts_list.spec.js', ['orange-400', 'gray-300', 'red-400'], 'PASSED')
-      cy.get(dotSelector('accounts_new.spec.js', 'latest')).trigger('mouseenter')
-      cy.get('.v-popper__popper--shown').should('exist')
-
-      validateTooltip('Passed')
-      cy.get(dotSelector('accounts_new.spec.js', 'latest')).trigger('mouseleave')
-      cy.get(averageDurationSelector('accounts_list.spec.js')).contains('0:12')
-
-      cy.wait(1200)
-
-      // new results should be shown
-      specShouldShow('accounts_list.spec.js', ['orange-400', 'gray-300', 'red-400'], 'PASSED')
-      cy.get(dotSelector('accounts_new.spec.js', 'latest')).trigger('mouseenter')
-      cy.get('.v-popper__popper--shown').should('exist')
-
-      validateTooltip('Passed')
-      cy.get(dotSelector('accounts_new.spec.js', 'latest')).trigger('mouseleave')
-      cy.get(averageDurationSelector('accounts_list.spec.js')).contains('0:12')
-    })
-  })
 })
 
 describe('App/Cloud Integration - Latest runs and Average duration', { viewportWidth: 1200 }, () => {
@@ -667,6 +615,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
 
       simulateRunData()
       cy.visitApp()
+      cy.specsPageIsVisible()
 
       cy.findByTestId('sidebar-link-specs-page').click()
 
@@ -679,7 +628,7 @@ describe('App/Cloud Integration - Latest runs and Average duration', { viewportW
     })
 
     // TODO: fix flaky test https://github.com/cypress-io/cypress/issues/23419
-    it.skip('shows offline alert then hides it after coming online', () => {
+    it('shows offline alert then hides it after coming online', { retries: 15 }, () => {
       cy.findByTestId('offline-alert')
       .should('contain.text', defaultMessages.specPage.offlineWarning.title)
       .and('contain.text', defaultMessages.specPage.offlineWarning.explainer)

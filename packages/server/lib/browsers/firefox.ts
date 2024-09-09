@@ -10,7 +10,7 @@ import FirefoxProfile from 'firefox-profile'
 import * as errors from '../errors'
 import firefoxUtil from './firefox-util'
 import utils from './utils'
-import type { Browser, BrowserInstance } from './types'
+import type { Browser, BrowserInstance, GracefulShutdownOptions } from './types'
 import { EventEmitter } from 'events'
 import os from 'os'
 import treeKill from 'tree-kill'
@@ -199,6 +199,12 @@ const defaultPreferences = {
 
   'privacy.trackingprotection.enabled': false,
 
+  // CDP is deprecated in Firefox 129 and up.
+  // In order to enable CDP, we need to set
+  // remote.active-protocol=2
+  // @see https://fxdx.dev/deprecating-cdp-support-in-firefox-embracing-the-future-with-webdriver-bidi/
+  // @see https://github.com/cypress-io/cypress/issues/29713
+  'remote.active-protocols': 2,
   // Enable Remote Agent
   // https://bugzilla.mozilla.org/show_bug.cgi?id=1544393
   'remote.enabled': true,
@@ -347,7 +353,7 @@ toolbar {
 
 `
 
-let browserCriClient
+let browserCriClient: BrowserCriClient | undefined
 
 export function _createDetachedInstance (browserInstance: BrowserInstance, browserCriClient?: BrowserCriClient): BrowserInstance {
   const detachedInstance: BrowserInstance = new EventEmitter() as BrowserInstance
@@ -358,11 +364,10 @@ export function _createDetachedInstance (browserInstance: BrowserInstance, brows
   detachedInstance.kill = (): void => {
     // Close browser cri client socket. Do nothing on failure here since we're shutting down anyway
     if (browserCriClient) {
-      browserCriClient.close().catch()
-      browserCriClient = undefined
+      clearInstanceState({ gracefulShutdown: true })
     }
 
-    treeKill(browserInstance.pid, (err?, result?) => {
+    treeKill(browserInstance.pid as number, (err?, result?) => {
       debug('force-exit of process tree complete %o', { err, result })
       detachedInstance.emit('exit')
     })
@@ -371,12 +376,27 @@ export function _createDetachedInstance (browserInstance: BrowserInstance, brows
   return detachedInstance
 }
 
+/**
+* Clear instance state for the chrome instance, this is normally called in on kill or on exit.
+*/
+export function clearInstanceState (options: GracefulShutdownOptions = {}) {
+  debug('closing remote interface client')
+  if (browserCriClient) {
+    browserCriClient.close(options.gracefulShutdown).catch(() => {})
+    browserCriClient = undefined
+  }
+}
+
 export async function connectToNewSpec (browser: Browser, options: BrowserNewTabOpts, automation: Automation) {
-  await firefoxUtil.connectToNewSpec(options, automation, browserCriClient)
+  await firefoxUtil.connectToNewSpec(options, automation, browserCriClient!)
 }
 
 export function connectToExisting () {
   getCtx().onWarning(getError('UNEXPECTED_INTERNAL_ERROR', new Error('Attempting to connect to existing browser for Cypress in Cypress which is not yet implemented for firefox')))
+}
+
+export function connectProtocolToBrowser (): Promise<void> {
+  throw new Error('Protocol is not yet supported in firefox.')
 }
 
 async function recordVideo (videoApi: RunModeVideoApi) {
@@ -536,10 +556,11 @@ export async function open (browser: Browser, url: string, options: BrowserLaunc
     // user can overwrite this default with these env vars or --height, --width arguments
     MOZ_HEADLESS_WIDTH: '1280',
     MOZ_HEADLESS_HEIGHT: '721',
+    ...launchOptions.env,
   })
 
   try {
-    browserCriClient = await firefoxUtil.setup({ automation, extensions: launchOptions.extensions, url, foxdriverPort, marionettePort, remotePort, onError: options.onError, options })
+    browserCriClient = await firefoxUtil.setup({ automation, extensions: launchOptions.extensions, url, foxdriverPort, marionettePort, remotePort, onError: options.onError })
 
     if (os.platform() === 'win32') {
       // override the .kill method for Windows so that the detached Firefox process closes between specs
@@ -551,21 +572,27 @@ export async function open (browser: Browser, url: string, options: BrowserLaunc
     const originalBrowserKill = browserInstance.kill
 
     browserInstance.kill = (...args) => {
-      debug('closing remote interface client')
-
       // Do nothing on failure here since we're shutting down anyway
-      if (browserCriClient) {
-        browserCriClient.close().catch()
-        browserCriClient = undefined
-      }
+      clearInstanceState({ gracefulShutdown: true })
 
       debug('closing firefox')
 
       return originalBrowserKill.apply(browserInstance, args)
     }
+
+    await utils.executeAfterBrowserLaunch(browser, {
+      webSocketDebuggerUrl: browserCriClient.getWebSocketDebuggerUrl(),
+    })
   } catch (err) {
     errors.throwErr('FIREFOX_COULD_NOT_CONNECT', err)
   }
 
   return browserInstance
+}
+
+export async function closeExtraTargets () {
+  // we're currently holding off on implementing Firefox support in order
+  // to release Chromium support as soon as possible and may add Firefox
+  // support in the future
+  debug('Closing extra targets is not currently supported in Firefox')
 }

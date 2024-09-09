@@ -29,9 +29,9 @@ describe('e2e stdout', () => {
       expectedExitCode: 3,
       onStdout: (stdout) => {
         // assert stack trace line numbers/columns mirror source map
-        expect(stdout).to.include('Context.eval (webpack:///./cypress/e2e/stdout_failing.cy.js:7:12)')
-        expect(stdout).to.include('Context.eval (webpack:///./cypress/e2e/stdout_failing.cy.js:15:9)')
-        expect(stdout).to.include('Context.eval (webpack:///./cypress/e2e/stdout_failing.cy.js:27:9)')
+        expect(stdout).to.include('Context.eval (webpack://e2e/./cypress/e2e/stdout_failing.cy.js:7:12)')
+        expect(stdout).to.include('Context.eval (webpack://e2e/./cypress/e2e/stdout_failing.cy.js:15:9)')
+        expect(stdout).to.include('Context.eval (webpack://e2e/./cypress/e2e/stdout_failing.cy.js:27:9)')
       },
     })
   })
@@ -66,7 +66,7 @@ describe('e2e stdout', () => {
     return systemTests.exec(this, {
       port: 2020,
       snapshot: true,
-      spec: 'nested-1/nested-2/nested-3/*',
+      spec: 'nested-1/nested-2/nested-3/**/*',
     })
   })
 

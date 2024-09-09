@@ -113,14 +113,14 @@ describe('FileRow', () => {
 
     cy.contains('cypress/integration/command.js')
     cy.contains(messages.changesRequiredLabel).should('be.visible')
-    cy.contains(messages.changesRequiredBadge).should('not.exist') // Hide badge when row is expanded
+    cy.get('[data-cy=changes-required-badge]').should('not.exist') // Hide badge when row is expanded
     cy.contains(changesRequiredDescription).should('be.visible')
     cy.get('pre').should('have.length', 2)
 
-    cy.percySnapshot('row starts open')
+    cy.get('.shiki').should('be.visible')
     cy.contains('cypress/integration/command.js').click()
 
-    cy.percySnapshot('row collapses after click')
+    cy.get('.shiki').should('not.be.visible')
   })
 
   it('responds nice to small screens', { viewportWidth: 500 }, () => {
@@ -140,7 +140,7 @@ describe('FileRow', () => {
 
     cy.contains('cypress/integration/command.js')
     cy.contains(messages.changesRequiredLabel).should('be.visible')
-    cy.contains(messages.changesRequiredBadge).should('not.exist')
+    cy.get('[data-cy=changes-required-badge]').should('not.exist')
     cy.contains(changesRequiredDescription).should('be.visible')
     cy.get('pre').should('exist')
 

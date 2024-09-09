@@ -72,68 +72,6 @@ We dynamically generated a new test to display this failure.
 
 `
 
-exports['testConfigOverrides / has originalTitle when skip due to browser config'] = `
-
-====================================================================================================
-
-  (Run Starting)
-
-  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ Cypress:    1.2.3                                                                              │
-  │ Browser:    FooBrowser 88                                                                      │
-  │ Specs:      1 found (skip-browser.js)                                                          │
-  │ Searched:   cypress/e2e/testConfigOverrides/skip-browser.js                                    │
-  └────────────────────────────────────────────────────────────────────────────────────────────────┘
-
-
-────────────────────────────────────────────────────────────────────────────────────────────────────
-                                                                                                    
-  Running:  skip-browser.js                                                                 (1 of 1)
-
-
-  suite
-    - has invalid testConfigOverrides (skipped due to browser)
-
-
-  0 passing
-  1 pending
-
-
-  (Results)
-
-  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ Tests:        1                                                                                │
-  │ Passing:      0                                                                                │
-  │ Failing:      0                                                                                │
-  │ Pending:      1                                                                                │
-  │ Skipped:      0                                                                                │
-  │ Screenshots:  0                                                                                │
-  │ Video:        true                                                                             │
-  │ Duration:     X seconds                                                                        │
-  │ Spec Ran:     skip-browser.js                                                                  │
-  └────────────────────────────────────────────────────────────────────────────────────────────────┘
-
-
-  (Video)
-
-  -  Started processing:  Compressing to 32 CRF                                                     
-  -  Finished processing: /XXX/XXX/XXX/cypress/videos/skip-browser.js.mp4                 (X second)
-
-
-====================================================================================================
-
-  (Run Finished)
-
-
-       Spec                                              Tests  Passing  Failing  Pending  Skipped  
-  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ ✔  skip-browser.js                          XX:XX        1        -        -        1        - │
-  └────────────────────────────────────────────────────────────────────────────────────────────────┘
-    ✔  All specs passed!                        XX:XX        1        -        -        1        -  
-
-
-`
-
 exports['testConfigOverrides / fails when setting invalid config opt with Cypress.config() in before:test:run'] = `
 
 ====================================================================================================
@@ -182,7 +120,7 @@ exports['testConfigOverrides / fails when setting invalid config opt with Cypres
   │ Pending:      0                                                                                │
   │ Skipped:      0                                                                                │
   │ Screenshots:  2                                                                                │
-  │ Video:        true                                                                             │
+  │ Video:        false                                                                            │
   │ Duration:     X seconds                                                                        │
   │ Spec Ran:     invalid_before_test_event.js                                                     │
   └────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -194,13 +132,6 @@ exports['testConfigOverrides / fails when setting invalid config opt with Cypres
      ed).png                                                                                        
   -  /XXX/XXX/XXX/cypress/screenshots/invalid_before_test_event.js/nested -- does not     (1280x720)
       run 2 (failed).png                                                                            
-
-
-  (Video)
-
-  -  Started processing:  Compressing to 32 CRF                                                     
-  -  Finished processing: /XXX/XXX/XXX/cypress/videos/invalid_before_test_event.js.mp     (X second)
-                          4                                                                         
 
 
 ====================================================================================================
@@ -265,7 +196,7 @@ exports['testConfigOverrides / fails when setting invalid config opt with Cypres
   │ Pending:      0                                                                                │
   │ Skipped:      0                                                                                │
   │ Screenshots:  2                                                                                │
-  │ Video:        true                                                                             │
+  │ Video:        false                                                                            │
   │ Duration:     X seconds                                                                        │
   │ Spec Ran:     invalid_before_test_async_event.js                                               │
   └────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -277,13 +208,6 @@ exports['testConfigOverrides / fails when setting invalid config opt with Cypres
       (failed).png                                                                                  
   -  /XXX/XXX/XXX/cypress/screenshots/invalid_before_test_async_event.js/nested -- do     (1280x720)
      es not run 2 (failed).png                                                                      
-
-
-  (Video)
-
-  -  Started processing:  Compressing to 32 CRF                                                     
-  -  Finished processing: /XXX/XXX/XXX/cypress/videos/invalid_before_test_async_event     (X second)
-                          .js.mp4                                                                   
 
 
 ====================================================================================================
@@ -386,7 +310,7 @@ https://on.cypress.io/config
        runs:
      CypressError: The config passed to your suite-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -435,7 +359,7 @@ https://on.cypress.io/config
        "before all" hook for "test config override throws error":
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -449,7 +373,7 @@ Because this error occurred during a \`before all\` hook we are skipping the rem
        test config override throws error:
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -594,7 +518,7 @@ Instead the value was: \`"null"\`
          runs:
      CypressError: The config passed to your suite-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -647,7 +571,7 @@ https://on.cypress.io/config
          "before all" hook for "test config override throws error":
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -662,7 +586,7 @@ Because this error occurred during a \`before all\` hook we are skipping the rem
          test config override throws error:
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -742,7 +666,7 @@ exports['testConfigOverrides / correctly fails when invalid config values for it
          throws error at the correct line number:
      CypressError: The config passed to your suite-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -778,6 +702,187 @@ https://on.cypress.io/config
   │ ✖  only-invalid.js                          XX:XX        1        -        1        -        - │
   └────────────────────────────────────────────────────────────────────────────────────────────────┘
     ✖  1 of 1 failed (100%)                     XX:XX        1        -        1        -        -  
+
+
+`
+
+exports['testConfigOverrides / successfully runs valid suite-level-only overrides'] = `
+
+====================================================================================================
+
+  (Run Starting)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Cypress:    1.2.3                                                                              │
+  │ Browser:    FooBrowser 88                                                                      │
+  │ Specs:      1 found (valid-suite-only.js)                                                      │
+  │ Searched:   cypress/e2e/testConfigOverrides/valid-suite-only.js                                │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+  Running:  valid-suite-only.js                                                             (1 of 1)
+
+
+  suite-level-only overrides run as expected
+    ✓ 1st test passes
+    ✓ 2nd test passes
+    ✓ 3rd test passes
+
+  nested contexts 
+    nested suite-level-only overrides run as expected
+      ✓ 1st test passes
+      ✓ 2nd test passes
+      ✓ 3rd test passes
+
+
+  6 passing
+
+
+  (Results)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Tests:        6                                                                                │
+  │ Passing:      6                                                                                │
+  │ Failing:      0                                                                                │
+  │ Pending:      0                                                                                │
+  │ Skipped:      0                                                                                │
+  │ Screenshots:  0                                                                                │
+  │ Video:        false                                                                            │
+  │ Duration:     X seconds                                                                        │
+  │ Spec Ran:     valid-suite-only.js                                                              │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+====================================================================================================
+
+  (Run Finished)
+
+
+       Spec                                              Tests  Passing  Failing  Pending  Skipped  
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ ✔  valid-suite-only.js                      XX:XX        6        6        -        -        - │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    ✔  All specs passed!                        XX:XX        6        6        -        -        -  
+
+
+`
+
+exports['testConfigOverrides / has originalTitle when skipped due to browser config'] = `
+
+====================================================================================================
+
+  (Run Starting)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Cypress:    1.2.3                                                                              │
+  │ Browser:    FooBrowser 88                                                                      │
+  │ Specs:      1 found (skip-browser.js)                                                          │
+  │ Searched:   cypress/e2e/testConfigOverrides/skip-browser.js                                    │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+  Running:  skip-browser.js                                                                 (1 of 1)
+
+
+  suite
+    - is skipped due to test-level browser override (skipped due to browser)
+
+  suite 2 (skipped due to browser)
+    - is skipped due to suite-level browser override
+
+
+  0 passing
+  2 pending
+
+
+  (Results)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Tests:        2                                                                                │
+  │ Passing:      0                                                                                │
+  │ Failing:      0                                                                                │
+  │ Pending:      2                                                                                │
+  │ Skipped:      0                                                                                │
+  │ Screenshots:  0                                                                                │
+  │ Video:        false                                                                            │
+  │ Duration:     X seconds                                                                        │
+  │ Spec Ran:     skip-browser.js                                                                  │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+====================================================================================================
+
+  (Run Finished)
+
+
+       Spec                                              Tests  Passing  Failing  Pending  Skipped  
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ ✔  skip-browser.js                          XX:XX        2        -        -        2        - │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    ✔  All specs passed!                        XX:XX        2        -        -        2        -  
+
+
+`
+
+exports['testConfigOverrides / maintains runnable body when skipped due to browser config'] = `
+
+====================================================================================================
+
+  (Run Starting)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Cypress:    1.2.3                                                                              │
+  │ Browser:    FooBrowser 88                                                                      │
+  │ Specs:      1 found (skip-browser.js)                                                          │
+  │ Searched:   cypress/e2e/testConfigOverrides/skip-browser.js                                    │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+  Running:  skip-browser.js                                                                 (1 of 1)
+
+
+  suite
+    - is skipped due to test-level browser override (skipped due to browser)
+
+  suite 2 (skipped due to browser)
+    - is skipped due to suite-level browser override
+
+
+  0 passing
+  2 pending
+
+
+  (Results)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Tests:        2                                                                                │
+  │ Passing:      0                                                                                │
+  │ Failing:      0                                                                                │
+  │ Pending:      2                                                                                │
+  │ Skipped:      0                                                                                │
+  │ Screenshots:  0                                                                                │
+  │ Video:        false                                                                            │
+  │ Duration:     X seconds                                                                        │
+  │ Spec Ran:     skip-browser.js                                                                  │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+====================================================================================================
+
+  (Run Finished)
+
+
+       Spec                                              Tests  Passing  Failing  Pending  Skipped  
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ ✔  skip-browser.js                          XX:XX        2        -        -        2        - │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    ✔  All specs passed!                        XX:XX        2        -        -        2        -  
 
 
 `
@@ -867,7 +972,7 @@ https://on.cypress.io/config
        runs:
      CypressError: The config passed to your suite-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -912,7 +1017,7 @@ https://on.cypress.io/config
        "before all" hook for "test config override throws error":
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -925,7 +1030,7 @@ Because this error occurred during a \`before all\` hook we are skipping the rem
        test config override throws error:
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -1069,7 +1174,7 @@ Instead the value was: \`"null"\`
          runs:
      CypressError: The config passed to your suite-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -1118,7 +1223,7 @@ https://on.cypress.io/config
          "before all" hook for "test config override throws error":
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -1132,7 +1237,7 @@ Because this error occurred during a \`before all\` hook we are skipping the rem
          test config override throws error:
      CypressError: The config passed to your test-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -1211,7 +1316,7 @@ exports['testConfigOverrides / correctly fails when invalid config values for it
          throws error at the correct line number:
      CypressError: The config passed to your suite-level overrides has the following validation error:
 
-Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers or nulls.
+Expected \`retries\` to be a positive number or null or an object with keys "openMode" and "runMode" with values of numbers, booleans, or nulls, or experimental configuration with key "experimentalStrategy" with value "detect-flake-but-always-fail" or "detect-flake-and-pass-on-threshold" and key "experimentalOptions" to provide a valid configuration for your selected strategy.
 
 Instead the value was: \`"1"\`
 
@@ -1250,7 +1355,7 @@ https://on.cypress.io/config
 
 `
 
-exports['testConfigOverrides / successfully runs valid suite-level-only overrides'] = `
+exports['testConfigOverrides / experimental retries specific behavior / fails when attempting to set experimental retries as override [chrome,electron]'] = `
 
 ====================================================================================================
 
@@ -1259,43 +1364,63 @@ exports['testConfigOverrides / successfully runs valid suite-level-only override
   ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
   │ Cypress:    1.2.3                                                                              │
   │ Browser:    FooBrowser 88                                                                      │
-  │ Specs:      1 found (valid-suite-only.js)                                                      │
-  │ Searched:   cypress/e2e/testConfigOverrides/valid-suite-only.js                                │
+  │ Specs:      1 found (override-with-experimental-retries.cy.js)                                 │
+  │ Searched:   cypress/e2e/override-with-experimental-retries.cy.js                               │
   └────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
-  Running:  valid-suite-only.js                                                             (1 of 1)
+  Running:  override-with-experimental-retries.cy.js                                        (1 of 1)
 
 
-  suite-level-only overrides run as expected
-    ✓ 1st test passes
-    ✓ 2nd test passes
-    ✓ 3rd test passes
-
-  nested contexts 
-    nested suite-level-only overrides run as expected
-      ✓ 1st test passes
-      ✓ 2nd test passes
-      ✓ 3rd test passes
+  overriding legacy retries with experimental retries
+    at the describe level
+      1) sets the config
+    at the test level
+      2) sets the config
 
 
-  6 passing
+  0 passing
+  2 failing
+
+  1) overriding legacy retries with experimental retries
+       at the describe level
+         sets the config:
+     CypressError: The config passed to your suite-level overrides has the following validation error:
+
+CypressError: The \`retries.experimentalStrategy\` configuration can only be set globally.
+
+https://on.cypress.io/config
+  Error
+      [stack trace lines]
+
+  2) overriding legacy retries with experimental retries
+       at the test level
+         sets the config:
+     CypressError: The config passed to your test-level overrides has the following validation error:
+
+CypressError: The \`retries.experimentalStrategy\` configuration can only be set globally.
+
+https://on.cypress.io/config
+  Error
+      [stack trace lines]
+
+
 
 
   (Results)
 
   ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ Tests:        6                                                                                │
-  │ Passing:      6                                                                                │
-  │ Failing:      0                                                                                │
+  │ Tests:        2                                                                                │
+  │ Passing:      0                                                                                │
+  │ Failing:      2                                                                                │
   │ Pending:      0                                                                                │
   │ Skipped:      0                                                                                │
   │ Screenshots:  0                                                                                │
   │ Video:        false                                                                            │
   │ Duration:     X seconds                                                                        │
-  │ Spec Ran:     valid-suite-only.js                                                              │
+  │ Spec Ran:     override-with-experimental-retries.cy.js                                         │
   └────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
@@ -1306,9 +1431,202 @@ exports['testConfigOverrides / successfully runs valid suite-level-only override
 
        Spec                                              Tests  Passing  Failing  Pending  Skipped  
   ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ ✔  valid-suite-only.js                      XX:XX        6        6        -        -        - │
+  │ ✖  override-with-experimental-retries.      XX:XX        2        -        2        -        - │
+  │    cy.js                                                                                       │
   └────────────────────────────────────────────────────────────────────────────────────────────────┘
-    ✔  All specs passed!                        XX:XX        6        6        -        -        -  
+    ✖  1 of 1 failed (100%)                     XX:XX        2        -        2        -        -  
+
+
+`
+
+exports['testConfigOverrides / experimental retries specific behavior / succeeds when setting legacy retries as an override to experimental retries [chrome,electron]'] = `
+
+====================================================================================================
+
+  (Run Starting)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Cypress:    1.2.3                                                                              │
+  │ Browser:    FooBrowser 88                                                                      │
+  │ Specs:      1 found (override-with-legacy-retries.cy.js)                                       │
+  │ Searched:   cypress/e2e/override-with-legacy-retries.cy.js                                     │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+  Running:  override-with-legacy-retries.cy.js                                              (1 of 1)
+
+
+  overriding experimental retries with legacy retries
+    ✓ sets the config
+
+
+  1 passing
+
+
+  (Results)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Tests:        1                                                                                │
+  │ Passing:      1                                                                                │
+  │ Failing:      0                                                                                │
+  │ Pending:      0                                                                                │
+  │ Skipped:      0                                                                                │
+  │ Screenshots:  0                                                                                │
+  │ Video:        false                                                                            │
+  │ Duration:     X seconds                                                                        │
+  │ Spec Ran:     override-with-legacy-retries.cy.js                                               │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+====================================================================================================
+
+  (Run Finished)
+
+
+       Spec                                              Tests  Passing  Failing  Pending  Skipped  
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ ✔  override-with-legacy-retries.cy.js       XX:XX        1        1        -        -        - │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    ✔  All specs passed!                        XX:XX        1        1        -        -        -  
+
+
+`
+
+exports['testConfigOverrides / experimental retries specific behavior / fails when attempting to set experimental retries as override [firefox]'] = `
+
+====================================================================================================
+
+  (Run Starting)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Cypress:    1.2.3                                                                              │
+  │ Browser:    FooBrowser 88                                                                      │
+  │ Specs:      1 found (override-with-experimental-retries.cy.js)                                 │
+  │ Searched:   cypress/e2e/override-with-experimental-retries.cy.js                               │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+  Running:  override-with-experimental-retries.cy.js                                        (1 of 1)
+
+
+  overriding legacy retries with experimental retries
+    at the describe level
+      1) sets the config
+    at the test level
+      2) sets the config
+
+
+  0 passing
+  2 failing
+
+  1) overriding legacy retries with experimental retries
+       at the describe level
+         sets the config:
+     CypressError: The config passed to your suite-level overrides has the following validation error:
+
+CypressError: The \`retries.experimentalStrategy\` configuration can only be set globally.
+
+https://on.cypress.io/config
+      [stack trace lines]
+
+  2) overriding legacy retries with experimental retries
+       at the test level
+         sets the config:
+     CypressError: The config passed to your test-level overrides has the following validation error:
+
+CypressError: The \`retries.experimentalStrategy\` configuration can only be set globally.
+
+https://on.cypress.io/config
+      [stack trace lines]
+
+
+
+
+  (Results)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Tests:        2                                                                                │
+  │ Passing:      0                                                                                │
+  │ Failing:      2                                                                                │
+  │ Pending:      0                                                                                │
+  │ Skipped:      0                                                                                │
+  │ Screenshots:  0                                                                                │
+  │ Video:        false                                                                            │
+  │ Duration:     X seconds                                                                        │
+  │ Spec Ran:     override-with-experimental-retries.cy.js                                         │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+====================================================================================================
+
+  (Run Finished)
+
+
+       Spec                                              Tests  Passing  Failing  Pending  Skipped  
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ ✖  override-with-experimental-retries.      XX:XX        2        -        2        -        - │
+  │    cy.js                                                                                       │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    ✖  1 of 1 failed (100%)                     XX:XX        2        -        2        -        -  
+
+
+`
+
+exports['testConfigOverrides / experimental retries specific behavior / succeeds when setting legacy retries as an override to experimental retries [firefox]'] = `
+
+====================================================================================================
+
+  (Run Starting)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Cypress:    1.2.3                                                                              │
+  │ Browser:    FooBrowser 88                                                                      │
+  │ Specs:      1 found (override-with-legacy-retries.cy.js)                                       │
+  │ Searched:   cypress/e2e/override-with-legacy-retries.cy.js                                     │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+  Running:  override-with-legacy-retries.cy.js                                              (1 of 1)
+
+
+  overriding experimental retries with legacy retries
+    ✓ sets the config
+
+
+  1 passing
+
+
+  (Results)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Tests:        1                                                                                │
+  │ Passing:      1                                                                                │
+  │ Failing:      0                                                                                │
+  │ Pending:      0                                                                                │
+  │ Skipped:      0                                                                                │
+  │ Screenshots:  0                                                                                │
+  │ Video:        false                                                                            │
+  │ Duration:     X seconds                                                                        │
+  │ Spec Ran:     override-with-legacy-retries.cy.js                                               │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+====================================================================================================
+
+  (Run Finished)
+
+
+       Spec                                              Tests  Passing  Failing  Pending  Skipped  
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ ✔  override-with-legacy-retries.cy.js       XX:XX        1        1        -        -        - │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    ✔  All specs passed!                        XX:XX        1        1        -        -        -  
 
 
 `

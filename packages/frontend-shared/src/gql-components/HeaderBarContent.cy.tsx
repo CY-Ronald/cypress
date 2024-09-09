@@ -1,6 +1,8 @@
 import { HeaderBar_HeaderBarContentFragmentDoc } from '../generated/graphql-test'
 import HeaderBarContent from './HeaderBarContent.vue'
 import { defaultMessages } from '@cy/i18n'
+import { CloudUserStubs } from '@packages/graphql/test/stubCloudTypes'
+import { useUserProjectStatusStore } from '../store/user-project-status-store'
 
 const text = defaultMessages.topNav
 
@@ -8,7 +10,7 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
   const mountFragmentWithData = (data = {}) => {
     cy.mountFragment(HeaderBar_HeaderBarContentFragmentDoc, {
       render: (gqlVal) => (
-        <div class="border-current border-1 h-700px resize overflow-auto">
+        <div class="border-current border h-[700px] resize overflow-auto">
           <HeaderBarContent gql={{ ...gqlVal, ...data }} />
         </div>
       ),
@@ -17,10 +19,8 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
 
   it('renders with functional browser menu when show-browsers prop is true', () => {
     cy.mountFragment(HeaderBar_HeaderBarContentFragmentDoc, {
-      render: (gqlVal) => <div class="border-current border-1 h-700px resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
+      render: (gqlVal) => <div class="border-current border h-[700px] resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
     })
-
-    cy.percySnapshot('before browsers open')
 
     cy.findByTestId('top-nav-active-browser')
     .should('be.visible')
@@ -42,7 +42,7 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
     cy.get('[data-cy="top-nav-browser-list-item"]').parent()
     .should('have.class', 'overflow-auto')
 
-    cy.contains('Version unsupported')
+    cy.contains('(Unsupported)')
     .scrollIntoView()
     .should('be.visible')
     .closest('[data-cy="top-nav-browser-list-item"]')
@@ -61,10 +61,6 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
   })
 
   describe('breadcrumbs', () => {
-    afterEach(() => {
-      cy.percySnapshot()
-    })
-
     context('with current project', () => {
       const currentProject = {
         title: 'app',
@@ -83,14 +79,14 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
       })
 
       it('truncates the branch name if it is long', () => {
-        mountFragmentWithData({ currentProject: {
-          title: 'app',
-          branch: 'application-program/hard-drive-parse',
-        } })
+        mountFragmentWithData({
+          currentProject: {
+            title: 'app',
+            branch: 'application-program/hard-drive-parse',
+          },
+        })
 
         cy.get('.truncate').contains('application-program/hard-drive-parse').should('be.visible')
-
-        cy.percySnapshot()
 
         cy.get('.truncate').realHover()
         cy.get('.v-popper__popper--shown').contains('application-program/hard-drive-parse')
@@ -130,7 +126,6 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
     mountFragmentWithData()
 
     cy.findByTestId('top-nav-active-browser').should('not.exist')
-    cy.percySnapshot()
     cy.contains('button', text.docsMenu.docsHeading).click()
 
     cy.wrap(Object.values(text.docsMenu)).each((menuItem) => {
@@ -139,14 +134,14 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
       }
     })
 
-    cy.percySnapshot()
     cy.get('body').click()
     cy.contains('a', text.docsMenu.firstTest).should('not.be.visible')
-    cy.percySnapshot('after click')
   })
 
   it('docs menu has expected links with no current project', () => {
     mountFragmentWithData({ currentProject: null })
+
+    cy.contains('a', 'Projects').should('not.exist')
 
     // we render without a current project to validate ciSetup and fasterTests links
     // because outside of global mode, those are buttons that trigger popups
@@ -178,15 +173,11 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
           result.currentProject = null
         },
         render: (gqlVal) => (
-          <div class="border-current border-1 h-700px resize overflow-auto">
+          <div class="border-current border h-[700px] resize overflow-auto">
             <HeaderBarContent gql={gqlVal} />
           </div>
         ),
       })
-    })
-
-    afterEach(() => {
-      cy.percySnapshot()
     })
 
     // https://github.com/cypress-io/cypress/issues/21842
@@ -199,6 +190,8 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
 
       // docs menu flex direction is column when viewport width is small
       cy.findByTestId('docs-menu-container').should('have.css', 'flex-direction', 'column')
+
+      cy.percySnapshot()
     })
 
     it('shows docs menu correctly on wider viewports', () => {
@@ -210,6 +203,7 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
 
       // docs menu flex direction is row when viewport width is big enough.
       cy.findByTestId('docs-menu-container').should('have.css', 'flex-direction', 'row')
+      cy.percySnapshot()
     })
   })
 
@@ -233,7 +227,6 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
     })
 
     cy.contains('a', '8.7.0').should('be.visible').and('have.attr', 'href', 'https://on.cypress.io/changelog#8-7-0')
-    cy.percySnapshot()
   })
 
   it('shows hint and modal to upgrade to latest version of cypress', () => {
@@ -268,15 +261,13 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
         }
       },
       render: (gqlVal) => (
-        <div class="border-current border-1 h-700px resize overflow-auto">
+        <div class="border-current border h-[700px] resize overflow-auto">
           <HeaderBarContent gql={gqlVal} />
         </div>
       ),
     })
 
-    cy.contains('v8.6.0 • Upgrade').should('be.visible')
-    cy.percySnapshot('before upgrade click')
-    cy.contains('v8.6.0 • Upgrade').click()
+    cy.contains('v8.6.0 • Upgrade').should('be.visible').click()
     cy.findByTestId('latest-version').contains('8.7.0')
     cy.findByTestId('current-version').contains('8.6.0')
     cy.findByTestId('update-hint').should('be.visible')
@@ -285,37 +276,32 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
 
     cy.contains(`${defaultMessages.topNav.updateCypress.title} 8.7.0`).should('be.visible')
     cy.contains('test-project').should('be.visible')
-    cy.contains('code', 'yarn add -D cypress').should('be.visible')
-    cy.percySnapshot('after upgrade modal open')
+    cy.findByDisplayValue('yarn add -D cypress@8.7.0').should('be.visible')
+    cy.get('p').contains('You are currently running Version 8.6.0 of Cypress. To upgrade to the latest version for your project, first close this app, then paste the command below into your terminal:')
 
     cy.get('body').type('{esc}') // dismiss modal with keyboard
     cy.contains(`${defaultMessages.topNav.updateCypress.title} 8.7.0`).should('not.exist')
-  })
-
-  it('the login modal reaches "opening browser" status', () => {
-    mountFragmentWithData()
-
-    cy.findByRole('button', { name: text.login.actionLogin })
-    .click()
-
-    cy.contains('h2', text.login.titleInitial).should('be.visible')
     cy.percySnapshot()
-
-    cy.findByRole('button', { name: text.login.actionLogin })
-    .should('be.visible')
-    .and('have.focus')
-
-    cy.findByRole('button', { name: defaultMessages.actions.close }).click()
-
-    cy.contains('h2', text.login.titleInitial).should('not.exist')
   })
 
   it('the logged in state is correctly presented in header', () => {
+    const userProjectStatusStore = useUserProjectStatusStore()
+
+    userProjectStatusStore.setUserFlag('isLoggedIn', true)
+
     const cloudViewer = {
+      ...CloudUserStubs.me,
+      organizations: null,
+      firstOrganization: {
+        __typename: 'CloudOrganizationConnection' as const,
+        nodes: [],
+      },
       id: '1',
       email: 'test@test.test',
       fullName: 'Tester Test',
     }
+
+    userProjectStatusStore.setUserData(cloudViewer)
 
     cy.mountFragment(HeaderBar_HeaderBarContentFragmentDoc, {
       onResult: (result) => {
@@ -324,7 +310,7 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
         result.cloudViewer = cloudViewer
         result.cloudViewer.__typename = 'CloudUser'
       },
-      render: (gqlVal) => <div class="border-current border-1 h-700px resize overflow-auto"><HeaderBarContent gql={gqlVal} /></div>,
+      render: (gqlVal) => <div class="border-current border h-[700px] resize overflow-auto"><HeaderBarContent gql={gqlVal} /></div>,
     })
 
     cy.findByRole('button', { name: text.login.profileMenuLabel }).click()
@@ -336,24 +322,19 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
 
   it('Shows a page name instead of project when a page name is provided', () => {
     cy.mountFragment(HeaderBar_HeaderBarContentFragmentDoc, {
-      render: (gqlVal) => <div class="border-current border-1 h-700px resize overflow-auto"><HeaderBarContent gql={gqlVal} pageName="Test Page" /></div>,
+      render: (gqlVal) => <div class="border-current border h-[700px] resize overflow-auto"><HeaderBarContent gql={gqlVal} pageName="Test Page" /></div>,
     })
 
     cy.contains('Project').should('not.exist')
     cy.contains('Test Page').should('be.visible')
-    cy.percySnapshot()
   })
 
   describe('prompts', () => {
-    afterEach(() => {
-      cy.percySnapshot()
-    })
-
     describe('the CI prompt', () => {
       context('opens on click', () => {
         beforeEach(() => {
           cy.mountFragment(HeaderBar_HeaderBarContentFragmentDoc, {
-            render: (gqlVal) => <div class="border-current border-1 h-700px resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
+            render: (gqlVal) => <div class="border-current border h-[700px] resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
           })
 
           cy.contains('Docs').click()
@@ -362,7 +343,6 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
 
         it('opens on menu item click', () => {
           cy.contains(defaultMessages.topNav.docsMenu.prompts.ci1.description).should('be.visible')
-          cy.percySnapshot()
         })
 
         it('is dismissible from X icon', () => {
@@ -376,7 +356,11 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
           cy.clock(1609891200000)
         })
 
-        function mountWithSavedState (options?: {state?: object, projectId?: string }) {
+        afterEach(() => {
+          cy.clock().invoke('restore')
+        })
+
+        function mountWithSavedState (options?: { state?: object, projectId?: string }) {
           const mountResult = cy.mountFragment(HeaderBar_HeaderBarContentFragmentDoc, {
             onResult: (result) => {
               if (!result.currentProject) {
@@ -390,13 +374,13 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
                 ...(options?.state ?? {}),
               }
 
-              const projectId = result.currentProject.config.find((item: {field: string, value: string}) => item.field = 'projectId')
+              const projectId = result.currentProject.config.find((item: { field: string, value: string }) => item.field = 'projectId')
 
               if (projectId) {
                 projectId.value = options?.projectId
               }
             },
-            render: (gqlVal) => <div class="border-current border-1 h-700px resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} allowAutomaticPromptOpen={true} /></div>,
+            render: (gqlVal) => <div class="border-current border h-[700px] resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} allowAutomaticPromptOpen={true} /></div>,
           })
 
           // Auto-opening prompts wait 2000ms after mount before opening
@@ -458,7 +442,7 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
                 promptsShown: {},
               }
             },
-            render: (gqlVal) => <div class="border-current border-1 h-700px resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
+            render: (gqlVal) => <div class="border-current border h-[700px] resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
           })
 
           cy.contains(defaultMessages.topNav.docsMenu.prompts.ci1.description).should('not.exist')
@@ -474,7 +458,7 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
       context('opens on click', () => {
         beforeEach(() => {
           cy.mountFragment(HeaderBar_HeaderBarContentFragmentDoc, {
-            render: (gqlVal) => <div class="border-current border-1 h-700px resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
+            render: (gqlVal) => <div class="border-current border h-[700px] resize overflow-auto"><HeaderBarContent gql={gqlVal} show-browsers={true} /></div>,
           })
 
           cy.contains('Docs').click()
@@ -482,7 +466,6 @@ describe('<HeaderBarContent />', { viewportWidth: 1000, viewportHeight: 750 }, (
         })
 
         it('opens on menu item click', () => {
-          cy.percySnapshot()
           cy.contains(defaultMessages.topNav.docsMenu.prompts.orchestration1.title).should('be.visible')
           cy.contains('Getting Started').should('not.exist')
         })

@@ -27,12 +27,16 @@ type FrameworkConfig = {
   }
 }
 
+export type ConfigHandler =
+  Partial<Configuration>
+  | (() => Partial<Configuration> | Promise<Partial<Configuration>>)
+
 export type WebpackDevServerConfig = {
   specs: Cypress.Spec[]
   cypressConfig: Cypress.PluginConfigOptions
   devServerEvents: NodeJS.EventEmitter
   onConfigNotFound?: (devServer: 'webpack', cwd: string, lookedIn: string[]) => void
-  webpackConfig?: unknown // Derived from the user's webpack
+  webpackConfig?: ConfigHandler // Derived from the user's webpack config
 } & FrameworkConfig
 
 /**
@@ -60,8 +64,11 @@ export function devServer (devServerConfig: WebpackDevServerConfig): Promise<Cyp
   return new Promise(async (resolve, reject) => {
     const result = await devServer.create(devServerConfig) as DevServerCreateResult
 
+    // @ts-expect-error
+    const { port } = result.server?.options
+
     if (result.version === 3) {
-      const srv = result.server.listen(0, '127.0.0.1', () => {
+      const srv = result.server.listen(port || 0, '127.0.0.1', () => {
         const port = (srv.address() as AddressInfo).port
 
         debug('Component testing webpack server 3 started on port %s', port)
@@ -110,7 +117,25 @@ export type PresetHandlerResult = { frameworkConfig: Configuration, sourceWebpac
 
 type Optional<T, K extends keyof T> = Pick<Partial<T>, K> & Omit<T, K>
 
+const thirdPartyDefinitionPrefixes = {
+  // matches @org/cypress-ct-*
+  namespacedPrefixRe: /^@.+?\/cypress-ct-.+/,
+  globalPrefix: 'cypress-ct-',
+}
+
+export function isThirdPartyDefinition (framework: string) {
+  return framework.startsWith(thirdPartyDefinitionPrefixes.globalPrefix) ||
+    thirdPartyDefinitionPrefixes.namespacedPrefixRe.test(framework)
+}
+
 async function getPreset (devServerConfig: WebpackDevServerConfig): Promise<Optional<PresetHandlerResult, 'frameworkConfig'>> {
+  const defaultWebpackModules = () => ({ sourceWebpackModulesResult: sourceDefaultWebpackDependencies(devServerConfig) })
+
+  // Third party library (eg solid-js, lit, etc)
+  if (devServerConfig.framework && isThirdPartyDefinition(devServerConfig.framework)) {
+    return defaultWebpackModules()
+  }
+
   switch (devServerConfig.framework) {
     case 'create-react-app':
       return createReactAppHandler(devServerConfig)
@@ -118,7 +143,7 @@ async function getPreset (devServerConfig: WebpackDevServerConfig): Promise<Opti
       return await nuxtHandler(devServerConfig)
 
     case 'vue-cli':
-      return vueCliHandler(devServerConfig)
+      return await vueCliHandler(devServerConfig)
 
     case 'next':
       return await nextHandler(devServerConfig)
@@ -130,10 +155,10 @@ async function getPreset (devServerConfig: WebpackDevServerConfig): Promise<Opti
     case 'vue':
     case 'svelte':
     case undefined:
-      return { sourceWebpackModulesResult: sourceDefaultWebpackDependencies(devServerConfig) }
+      return defaultWebpackModules()
 
     default:
-      throw new Error(`Unexpected framework ${(devServerConfig as any).framework}, please visit https://docs.cypress.io/guides/component-testing/component-framework-configuration to see a list of supported frameworks`)
+      throw new Error(`Unexpected framework ${(devServerConfig as any).framework}, please visit https://on.cypress.io/component-framework-configuration to see a list of supported frameworks`)
   }
 }
 

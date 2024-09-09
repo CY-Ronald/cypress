@@ -81,6 +81,13 @@ describe('lib/tasks/download', function () {
       snapshot('desktop url from template with version', normalize(url))
     })
 
+    it('returns custom url from template with multiple replacements', () => {
+      process.env.CYPRESS_DOWNLOAD_PATH_TEMPLATE = '${endpoint}/${platform}/${arch}/cypress-${version}-${platform}-${arch}.zip?referrer=${endpoint}&version=${version}'
+      const url = download.getUrl('ARCH', '0.20.2')
+
+      snapshot('desktop url from template with multiple replacements', normalize(url))
+    })
+
     it('returns custom url from template with escaped dollar sign', () => {
       process.env.CYPRESS_DOWNLOAD_PATH_TEMPLATE = '\\${endpoint}/\\${platform}-\\${arch}/cypress.zip'
       const url = download.getUrl('ARCH', '0.20.2')
@@ -481,10 +488,6 @@ describe('lib/tasks/download', function () {
   })
 
   context('architecture detection', () => {
-    beforeEach(() => {
-      sinon.stub(os, 'arch')
-    })
-
     context('Apple Silicon/M1', () => {
       function nockDarwinArm64 () {
         return nock('https://download.cypress.io')
@@ -607,7 +610,7 @@ describe('lib/tasks/download', function () {
       // prevent ambient environment masking of environment variables referenced in this test
 
       ;([
-        'CYPRESS_DOWNLOAD_USE_CA', 'NO_PROXY', 'http_proxy',
+        'NO_PROXY', 'http_proxy',
         'https_proxy', 'npm_config_ca', 'npm_config_cafile',
         'npm_config_https_proxy', 'npm_config_proxy',
       ]).forEach((e) => {
@@ -683,7 +686,6 @@ describe('lib/tasks/download', function () {
     })
 
     it('returns CA from npm_config_ca', () => {
-      process.env.CYPRESS_DOWNLOAD_USE_CA = 'true'
       process.env.npm_config_ca = 'foo'
 
       return download.getCA().then((ca) => {
@@ -692,7 +694,6 @@ describe('lib/tasks/download', function () {
     })
 
     it('returns CA from npm_config_cafile', () => {
-      process.env.CYPRESS_DOWNLOAD_USE_CA = 'true'
       process.env.npm_config_cafile = 'test/fixture/cafile.pem'
 
       return download.getCA().then((ca) => {
@@ -701,7 +702,6 @@ describe('lib/tasks/download', function () {
     })
 
     it('returns undefined if failed reading npm_config_cafile', () => {
-      process.env.CYPRESS_DOWNLOAD_USE_CA = 'true'
       process.env.npm_config_cafile = 'test/fixture/not-exists.pem'
 
       return download.getCA().then((ca) => {

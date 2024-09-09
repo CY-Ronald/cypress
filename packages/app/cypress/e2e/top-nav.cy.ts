@@ -1,10 +1,14 @@
 import type { SinonStub } from 'sinon'
 import defaultMessages from '@packages/frontend-shared/src/locales/en-US.json'
+import { CYPRESS_REMOTE_MANIFEST_URL, NPM_CYPRESS_REGISTRY_URL } from '@packages/types'
 import type Sinon from 'sinon'
+import { dayjs } from '../../src/runs/utils/day'
 
 const pkg = require('@packages/root')
 
 const loginText = defaultMessages.topNav.login
+
+const isWindows = Cypress.platform === 'win32'
 
 beforeEach(() => {
   cy.clock(Date.UTC(2021, 9, 30), ['Date'])
@@ -21,6 +25,7 @@ describe('App Top Nav Workflows', () => {
       cy.openProject('launchpad')
       cy.startAppServer()
       cy.visitApp()
+      cy.specsPageIsVisible()
 
       cy.findByTestId('app-header-bar').should('be.visible').and('contain', 'Specs')
     })
@@ -33,6 +38,7 @@ describe('App Top Nav Workflows', () => {
         cy.openProject('launchpad', ['--browser', 'firefox'])
         cy.startAppServer()
         cy.visitApp()
+        cy.specsPageIsVisible()
 
         cy.findByTestId('top-nav-active-browser-icon')
         .should('have.attr', 'src')
@@ -53,12 +59,12 @@ describe('App Top Nav Workflows', () => {
         cy.openProject('launchpad')
         cy.startAppServer()
         cy.visitApp()
+        cy.specsPageIsVisible()
       })
 
       it('shows the current browser in the top nav browser list button', () => {
         cy.findByTestId('top-nav-active-browser-icon')
         .should('have.attr', 'src')
-        .and('contain', 'chrome')
 
         cy.findByTestId('top-nav-active-browser').should('contain', 'Chrome 1')
       })
@@ -70,25 +76,25 @@ describe('App Top Nav Workflows', () => {
 
         cy.get('@browserItems').eq(0)
         .should('contain', 'Chrome')
-        .and('contain', 'Version 1.2.3')
+        .and('contain', 'Version 1')
         .findByTestId('top-nav-browser-list-selected-item')
         .should('exist')
 
         cy.get('@browserItems').eq(1)
         .should('contain', 'Edge')
-        .and('contain', 'Version 8.9.10')
+        .and('contain', 'Version 8')
         .findByTestId('top-nav-browser-list-selected-item')
         .should('not.exist')
 
         cy.get('@browserItems').eq(2)
         .should('contain', 'Electron')
-        .and('contain', 'Version 12.13.14')
+        .and('contain', 'Version 12')
         .findByTestId('top-nav-browser-list-selected-item')
         .should('not.exist')
 
         cy.get('@browserItems').eq(3)
         .should('contain', 'Firefox')
-        .and('contain', 'Version 5.6.7')
+        .and('contain', 'Version 5')
         .findByTestId('top-nav-browser-list-selected-item')
         .should('not.exist')
       })
@@ -110,7 +116,7 @@ describe('App Top Nav Workflows', () => {
           expect(ctx.actions.browser.setActiveBrowserById).to.have.been.calledWith(browserId)
           expect(genId).to.eql('edge-chromium-stable')
           expect(ctx.actions.project.launchProject).to.have.been.calledWith(
-            ctx.coreData.currentTestingType, undefined, undefined,
+            ctx.coreData.currentTestingType, { shouldLaunchNewTab: false }, '',
           )
         })
       })
@@ -139,6 +145,7 @@ describe('App Top Nav Workflows', () => {
         cy.openProject('launchpad')
         cy.startAppServer()
         cy.visitApp()
+        cy.specsPageIsVisible()
 
         cy.findByTestId('app-header-bar').validateExternalLink({
           name: 'v10.0.0',
@@ -171,6 +178,7 @@ describe('App Top Nav Workflows', () => {
         cy.openProject('launchpad')
         cy.startAppServer()
         cy.visitApp()
+        cy.specsPageIsVisible()
       })
 
       it('shows dropdown with version info if user version is outdated', () => {
@@ -195,7 +203,7 @@ describe('App Top Nav Workflows', () => {
       })
 
       it('hides dropdown when version in header is clicked', () => {
-        cy.findByTestId('cypress-update-popover').findByRole('button', { expanded: false }).as('topNavVersionButton').click()
+        cy.findByTestId('cypress-update-popover').findAllByRole('button').first().as('topNavVersionButton').click()
 
         cy.get('@topNavVersionButton').should('have.attr', 'aria-expanded', 'true')
 
@@ -211,7 +219,7 @@ describe('App Top Nav Workflows', () => {
 
         cy.findByRole('dialog', { name: 'Upgrade to Cypress 10.1.0' }).as('upgradeModal').within(() => {
           cy.contains('You are currently running Version 10.0.0 of Cypress').should('be.visible')
-          cy.contains('npm install -D cypress@10.1.0').should('be.visible')
+          cy.findByDisplayValue('npm install -D cypress@10.1.0').should('be.visible')
           cy.findByRole('button', { name: 'Close' }).click()
         })
 
@@ -227,7 +235,7 @@ describe('App Top Nav Workflows', () => {
 
           o.sinon.stub(ctx.util, 'fetch').callsFake(async (url: RequestInfo | URL, init?: RequestInit) => {
             await new Promise((resolve) => setTimeout(resolve, 500))
-            if (['https://download.cypress.io/desktop.json', 'https://registry.npmjs.org/cypress'].includes(String(url))) {
+            if ([CYPRESS_REMOTE_MANIFEST_URL, NPM_CYPRESS_REGISTRY_URL].includes(String(url))) {
               throw new Error(String(url))
             }
 
@@ -239,6 +247,7 @@ describe('App Top Nav Workflows', () => {
         cy.openProject('launchpad')
         cy.startAppServer()
         cy.visitApp()
+        cy.specsPageIsVisible()
 
         cy.findByTestId('app-header-bar').validateExternalLink({
           name: `v${pkg.version}`,
@@ -254,6 +263,7 @@ describe('App Top Nav Workflows', () => {
       cy.openProject('launchpad')
       cy.startAppServer()
       cy.visitApp()
+      cy.specsPageIsVisible()
 
       cy.findByTestId('app-header-bar').findByRole('button', { name: 'Docs', expanded: false }).as('docsButton')
     })
@@ -261,7 +271,7 @@ describe('App Top Nav Workflows', () => {
     it('shows popover with additional doc links', () => {
       cy.get('@docsButton').click().should('have.attr', 'aria-expanded', 'true')
 
-      cy.findByRole('heading', { name: 'Getting Started', level: 2 })
+      cy.findByRole('heading', { name: 'Getting started', level: 2 })
       cy.findByRole('heading', { name: 'References', level: 2 })
       cy.findByRole('heading', { name: 'Run in CI/CD', level: 2 })
 
@@ -275,11 +285,11 @@ describe('App Top Nav Workflows', () => {
           href: 'https://on.cypress.io/testing-your-app?utm_medium=Docs+Menu&utm_content=Testing+Your+App&utm_source=Binary%3A+App',
         },
         {
-          name: 'Organizing Tests',
+          name: 'Organizing tests',
           href: 'https://on.cypress.io/writing-and-organizing-tests?utm_medium=Docs+Menu&utm_content=Organizing+Tests&utm_source=Binary%3A+App',
         },
         {
-          name: 'Best Practices',
+          name: 'Best practices',
           href: 'https://on.cypress.io/best-practices?utm_medium=Docs+Menu&utm_content=Best+Practices&utm_source=Binary%3A+App',
         },
         {
@@ -330,12 +340,13 @@ describe('App Top Nav Workflows', () => {
         cy.startAppServer()
         cy.loginUser()
         cy.visitApp()
+        cy.specsPageIsVisible()
 
-        cy.findByTestId('app-header-bar').findByRole('button', { name: 'Profile and Log Out', expanded: false }).as('logInButton')
+        cy.findByTestId('app-header-bar').findByRole('button', { name: 'Profile and logout', expanded: false }).as('profileButton')
       })
 
       it('shows user in top nav when logged in', () => {
-        cy.get('@logInButton').click()
+        cy.get('@profileButton').click()
 
         cy.findByTestId('login-panel').contains('Test User').should('be.visible')
         cy.findByTestId('login-panel').contains('test@example.com').should('be.visible')
@@ -349,7 +360,7 @@ describe('App Top Nav Workflows', () => {
       })
 
       it('replaces user avatar after logout', () => {
-        cy.get('@logInButton').click()
+        cy.get('@profileButton').click()
 
         cy.withCtx((ctx, o) => {
           o.sinon.stub(ctx._apis.authApi, 'logOut').callsFake(async () => {
@@ -357,15 +368,19 @@ describe('App Top Nav Workflows', () => {
           })
         })
 
-        cy.findByRole('button', { name: 'Log Out' }).click()
+        cy.findByRole('button', { name: 'Log out' }).click()
 
-        cy.findByTestId('app-header-bar').findByText('Log In').should('be.visible')
+        cy.findByTestId('app-header-bar').findByText('Log in').should('be.visible')
       })
 
       it('logouts user if cloud request returns unauthorized', () => {
         cy.scaffoldProject('component-tests')
-        cy.openProject('component-tests')
+        cy.openProject('component-tests', ['--component'])
         cy.startAppServer('component')
+
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
 
         cy.remoteGraphQLIntercept((obj) => {
           if (obj.result.data?.cloudProjectBySlug) {
@@ -375,20 +390,16 @@ describe('App Top Nav Workflows', () => {
           return obj.result
         })
 
-        cy.loginUser()
-        cy.visitApp()
-
-        cy.get('@logInButton').click()
+        cy.get('@profileButton').click()
 
         cy.findByTestId('login-panel').contains('Test User').should('be.visible')
         cy.findByTestId('login-panel').contains('test@example.com').should('be.visible')
 
         cy.findByTestId('sidebar-link-runs-page').click()
-        cy.get('@logInButton').click()
 
         cy.findByTestId('app-header-bar').within(() => {
           cy.findByTestId('user-avatar-title').should('not.exist')
-          cy.findByRole('button', { name: 'Log In' }).click()
+          cy.findByRole('button', { name: 'Log in' })
         })
       })
     })
@@ -417,7 +428,7 @@ describe('App Top Nav Workflows', () => {
             return new Promise((resolve) => {
               setTimeout(() => {
                 resolve(options.user)
-              }, 1000)
+              }, 2000)
             })
           })
         }, { user })
@@ -426,18 +437,18 @@ describe('App Top Nav Workflows', () => {
       function logIn ({ expectedNextStepText, displayName }) {
         cy.findByTestId('app-header-bar').within(() => {
           cy.findByTestId('user-avatar-title').should('not.exist')
-          cy.findByRole('button', { name: 'Log In' }).click()
+          cy.findByRole('button', { name: 'Log in' }).click()
         })
 
         cy.findByRole('dialog', { name: 'Log in to Cypress' }).as('logInModal').within(() => {
-          cy.findByRole('button', { name: 'Log In' }).click()
+          cy.findByRole('button', { name: 'Log in' }).click()
 
-          // The Log In button transitions through a few states as the browser launch lifecycle completes
-          cy.findByRole('button', { name: 'Opening Browser' }).should('be.visible').and('be.disabled')
+          // The Log in button transitions through a few states as the browser launch lifecycle completes
+          cy.findByRole('button', { name: 'Opening browser' }).should('be.visible').and('be.disabled')
           cy.findByRole('button', { name: 'Waiting for you to log in' }).should('be.visible').and('be.disabled')
         })
 
-        cy.findByRole('dialog', { name: 'Login Successful' }).within(() => {
+        cy.findByRole('dialog', { name: 'Login successful' }).within(() => {
           cy.findByText('You are now logged in as', { exact: false }).should('be.visible')
           cy.validateExternalLink({ name: displayName, href: 'https://on.cypress.io/dashboard/profile' })
 
@@ -453,6 +464,18 @@ describe('App Top Nav Workflows', () => {
           cy.openProject('component-tests', ['--config-file', 'cypressWithoutProjectId.config.js'])
           cy.startAppServer()
           cy.visitApp()
+          cy.specsPageIsVisible()
+          cy.remoteGraphQLIntercept(async (obj) => {
+            if (obj.result.data?.cloudViewer) {
+              obj.result.data.cloudViewer.organizations = {
+                __typename: 'CloudOrganizationConnection',
+                id: 'test',
+                nodes: [{ __typename: 'CloudOrganization', id: '987' }],
+              }
+            }
+
+            return obj.result
+          })
 
           mockLogInActionsForUser(mockUser)
           logIn({ expectedNextStepText: 'Connect project', displayName: mockUser.name })
@@ -474,6 +497,7 @@ describe('App Top Nav Workflows', () => {
           cy.openProject('component-tests')
           cy.startAppServer()
           cy.visitApp()
+          cy.specsPageIsVisible()
         })
 
         it('shows log in modal workflow for user with name and email', () => {
@@ -494,6 +518,24 @@ describe('App Top Nav Workflows', () => {
           cy.findByTestId('app-header-bar').findByTestId('user-avatar-title').should('be.visible')
         })
 
+        it('if the project has no runs, shows "record your first run" prompt after clicking', () => {
+          cy.remoteGraphQLIntercept((obj) => {
+            if (obj.result?.data?.cloudProjectBySlug?.runs?.nodes?.length) {
+              obj.result.data.cloudProjectBySlug.runs.nodes = []
+            }
+
+            return obj.result
+          })
+
+          mockLogInActionsForUser(mockUserNoName)
+
+          logIn({ expectedNextStepText: 'Continue', displayName: mockUserNoName.email })
+
+          cy.contains('[data-cy=standard-modal] h2', defaultMessages.specPage.banners.record.title).should('be.visible')
+          cy.contains('[data-cy=standard-modal]', defaultMessages.specPage.banners.record.content).should('be.visible')
+          cy.contains('button', 'Copy').should('be.visible')
+        })
+
         it('shows correct error when browser cannot launch', () => {
           cy.withCtx((ctx, o) => {
             o.sinon.stub(ctx._apis.authApi, 'logIn').callsFake(async (onMessage) => {
@@ -509,11 +551,11 @@ describe('App Top Nav Workflows', () => {
 
           cy.findByTestId('app-header-bar').within(() => {
             cy.findByTestId('user-avatar-title').should('not.exist')
-            cy.findByRole('button', { name: 'Log In' }).click()
+            cy.findByRole('button', { name: 'Log in' }).click()
           })
 
-          cy.findByRole('dialog', { name: 'Log in to Cypress' }).within(() => {
-            cy.findByRole('button', { name: 'Log In' }).click()
+          cy.findByRole('dialog').within(() => {
+            cy.findByRole('button', { name: 'Log in' }).click()
 
             cy.contains('http://127.0.0.1:0000/redirect-to-auth').should('be.visible')
             cy.contains(loginText.titleBrowserError).should('be.visible')
@@ -541,11 +583,11 @@ describe('App Top Nav Workflows', () => {
 
           cy.findByTestId('app-header-bar').within(() => {
             cy.findByTestId('user-avatar-title').should('not.exist')
-            cy.findByRole('button', { name: 'Log In' }).click()
+            cy.findByRole('button', { name: 'Log in' }).click()
           })
 
-          cy.findByRole('dialog', { name: 'Log in to Cypress' }).within(() => {
-            cy.findByRole('button', { name: 'Log In' }).click()
+          cy.findByRole('dialog').within(() => {
+            cy.findByRole('button', { name: 'Log in' }).click()
 
             cy.contains(loginText.titleFailed).should('be.visible')
             cy.contains(loginText.bodyError).should('be.visible')
@@ -591,11 +633,11 @@ describe('App Top Nav Workflows', () => {
 
           cy.findByTestId('app-header-bar').within(() => {
             cy.findByTestId('user-avatar-title').should('not.exist')
-            cy.findByRole('button', { name: 'Log In' }).as('loginButton').click()
+            cy.findByRole('button', { name: 'Log in' }).as('loginButton').click()
           })
 
-          cy.findByRole('dialog', { name: 'Log in to Cypress' }).within(() => {
-            cy.findByRole('button', { name: 'Log In' }).click()
+          cy.findByRole('dialog').within(() => {
+            cy.findByRole('button', { name: 'Log in' }).click()
 
             cy.contains(loginText.titleFailed).should('be.visible')
             cy.contains(loginText.bodyError).should('be.visible')
@@ -628,11 +670,11 @@ describe('App Top Nav Workflows', () => {
 
           cy.findByTestId('app-header-bar').within(() => {
             cy.findByTestId('user-avatar-title').should('not.exist')
-            cy.findByRole('button', { name: 'Log In' }).as('loginButton').click()
+            cy.findByRole('button', { name: 'Log in' }).as('loginButton').click()
           })
 
-          cy.findByRole('dialog', { name: 'Log in to Cypress' }).within(() => {
-            cy.findByRole('button', { name: 'Log In' }).click()
+          cy.findByRole('dialog').within(() => {
+            cy.findByRole('button', { name: 'Log in' }).click()
             cy.contains(loginText.titleFailed).should('be.visible')
             cy.contains(loginText.bodyError).should('be.visible')
             cy.contains('An unexpected error occurred').should('be.visible')
@@ -642,6 +684,163 @@ describe('App Top Nav Workflows', () => {
 
           cy.get('@loginButton').click()
           cy.contains(loginText.titleInitial).should('be.visible')
+        })
+      })
+    })
+  })
+
+  function verifyBannerDoesNotExist () {
+    // Wait for header content to load before asserting that the banner doesn't exist
+    cy.findByTestId('header-bar-content').should('be.visible')
+    cy.findByTestId('enable-notifications-banner').should('not.exist')
+  }
+
+  // Run notifications will initially be released without support for Windows
+  // https://github.com/cypress-io/cypress/issues/26786
+  const itSkipIfWindows = isWindows ? it.skip : it
+
+  const itSkipIfNotWindows = !isWindows ? it.skip : it
+
+  describe('Enable Notifications Banner', () => {
+    context('should not render', () => {
+      it('when the user is not logged in', () => {
+        cy.scaffoldProject('launchpad')
+        cy.openProject('launchpad')
+        cy.startAppServer('e2e', { skipMockingPrompts: true })
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        verifyBannerDoesNotExist()
+      })
+
+      it('when a cloud project is not connected', () => {
+        cy.scaffoldProject('launchpad')
+        cy.openProject('launchpad')
+        cy.startAppServer('e2e', { skipMockingPrompts: true })
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        verifyBannerDoesNotExist()
+      })
+
+      it('when there are no recorded runs in the connected project', () => {
+        cy.findBrowsers()
+        cy.scaffoldProject('component-tests')
+        cy.openProject('component-tests')
+        cy.startAppServer()
+
+        cy.remoteGraphQLIntercept((obj) => {
+          if (obj.result?.data?.cloudProjectBySlug?.runs?.nodes?.length) {
+            obj.result.data.cloudProjectBySlug.runs.nodes = []
+          }
+
+          return obj.result
+        })
+
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        verifyBannerDoesNotExist()
+      })
+
+      itSkipIfNotWindows('when platform is Windows', () => {
+        cy.findBrowsers()
+        cy.scaffoldProject('component-tests')
+        cy.openProject('component-tests')
+        cy.startAppServer()
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        verifyBannerDoesNotExist()
+      })
+    })
+
+    context('should render', () => {
+      itSkipIfWindows('when there is at least one recorded run in the connected project', () => {
+        cy.findBrowsers()
+        cy.scaffoldProject('component-tests')
+        cy.openProject('component-tests')
+        cy.startAppServer()
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        cy.findByTestId('enable-notifications-banner').should('be.visible')
+      })
+    })
+
+    context('banner actions', () => {
+      itSkipIfWindows('dismisses the banner permanently if X is clicked', () => {
+        cy.scaffoldProject('component-tests')
+        cy.openProject('component-tests')
+        cy.startAppServer()
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        cy.findByTestId('enable-notifications-banner').should('be.visible')
+        cy.findByRole('button', { name: 'Dismiss banner' }).click()
+        verifyBannerDoesNotExist()
+
+        cy.reload()
+
+        verifyBannerDoesNotExist()
+      })
+
+      itSkipIfWindows('dismisses the banner for a specified time', () => {
+        // Restore the clock to the current time so that we can reload the page
+        cy.clock().then((clock) => {
+          clock.restore()
+        })
+
+        cy.scaffoldProject('component-tests')
+        cy.openProject('component-tests')
+        cy.startAppServer()
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        cy.findByTestId('enable-notifications-banner').should('be.visible')
+        cy.contains('button', 'Remind me later').click()
+
+        verifyBannerDoesNotExist()
+
+        // Reload to make sure that the banner doesn't display
+        cy.reload()
+
+        verifyBannerDoesNotExist()
+
+        cy.clock(dayjs().add(dayjs.duration({ days: 3, minutes: 1 })).valueOf())
+
+        cy.tick(20000) // Tick so that the banner logic re-runs
+
+        cy.findByTestId('enable-notifications-banner').should('be.visible')
+      })
+
+      itSkipIfWindows('enables notifications', () => {
+        let showSystemNotificationStub
+
+        cy.withCtx((ctx, o) => {
+          showSystemNotificationStub = o.sinon.stub(ctx.actions.electron, 'showSystemNotification')
+        })
+
+        cy.scaffoldProject('component-tests')
+        cy.openProject('component-tests')
+        cy.startAppServer()
+        cy.loginUser()
+        cy.visitApp()
+        cy.specsPageIsVisible()
+
+        cy.findByTestId('enable-notifications-banner').should('be.visible')
+        cy.contains('button', 'Enable desktop notifications').click()
+
+        verifyBannerDoesNotExist()
+
+        cy.withCtx((ctx) => {
+          expect(showSystemNotificationStub).to.have.been.calledWith('Notifications Enabled', 'Nice, notifications are enabled!')
         })
       })
     })
@@ -669,7 +868,8 @@ describe('Growth Prompts Can Open Automatically', () => {
     )
 
     cy.visitApp()
-    cy.contains('E2E specs')
+    cy.specsPageIsVisible()
+    cy.verifyE2ESelected()
     cy.wait(1000)
     cy.contains('Configure CI').should('be.visible')
   })
@@ -687,7 +887,8 @@ describe('Growth Prompts Can Open Automatically', () => {
     )
 
     cy.visitApp()
-    cy.contains('E2E specs')
+    cy.specsPageIsVisible()
+    cy.verifyE2ESelected()
     cy.wait(1000)
     cy.contains('Configure CI').should('not.exist')
   })

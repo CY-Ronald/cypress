@@ -60,8 +60,8 @@ type BoundCallbacks = {
   onHistoryNav: (delta) => void
   onSubmit: (e) => any
   onLoad: (e) => any
-  onBeforeUnload: (e) => undefined
-  onUnload: (e) => any
+  onBeforeUnload: (e) => undefined | Promise<undefined>
+  onPageHide: (e: PageTransitionEvent) => any
   onNavigation: (...args) => any
   onAlert: (str) => any
   onConfirm: (str) => boolean
@@ -93,12 +93,18 @@ export const bindToListeners = (contentWindow, callbacks: BoundCallbacks) => {
     callbacks.onBeforeUnload(e)
   })
 
-  addListener(contentWindow, 'unload', (e) => {
+  // While we must move to pagehide for Chromium, it does not work for our
+  // needs in Firefox. Until that is addressed, only Chromium uses the pagehide
+  // event as a proxy for AUT unloads.
+
+  const unloadEvent = Cypress.browser.family === 'chromium' ? 'pagehide' : 'unload'
+
+  addListener(contentWindow, unloadEvent, (e) => {
     // when we unload we need to remove all of the event listeners
     removeAllListeners()
 
     // else we know to proceed onwards!
-    callbacks.onUnload(e)
+    callbacks.onPageHide(e)
   })
 
   addListener(contentWindow, 'hashchange', (e) => {

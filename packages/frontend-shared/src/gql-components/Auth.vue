@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="props.showRetry"
-    class="flex gap-16px"
+    class="flex gap-[16px]"
   >
     <Button
       size="lg"
@@ -26,7 +26,7 @@
   </div>
   <div v-else-if="props.showLogout">
     <button
-      class="bg-white border-rounded outline-transparent border-gray-100 border-1 w-full py-8px text-14px text-indigo-500 block whitespace-nowrap hocus:border-gray-200 hover:no-underline"
+      class="bg-white border-rounded outline-transparent border-gray-100 border w-full py-[8px] text-[14px] text-indigo-500 block whitespace-nowrap hocus:border-gray-200 hover:no-underline"
       @click="handleLogout"
     >
       {{ t('topNav.login.actionLogout') }}
@@ -82,6 +82,10 @@ import type {
 } from '../generated/graphql'
 import Button from '@cy/components/Button.vue'
 import { useI18n } from '@cy/i18n'
+import { useUserProjectStatusStore } from '@packages/frontend-shared/src/store/user-project-status-store'
+
+const userProjectStatusStore = useUserProjectStatusStore()
+
 const { t } = useI18n()
 
 const isOnline = useOnline()
@@ -92,20 +96,34 @@ const props = defineProps<{
   showLogout?: boolean
   utmMedium: string
   utmContent?: string
-  showConnectButtonAfterLogin?: boolean
 }>()
 
 gql`
 fragment Auth on Query {
+  ...SelectCloudProjectModal
   cloudViewer {
     id
     email
     fullName
+    firstOrganization: organizations(first: 1) {
+      nodes {
+        id
+      }
+    }
   }
   authState {
     browserOpened
     name
     message
+  }
+  currentProject {
+    id
+    cloudProject {
+      __typename
+      ... on CloudProject {
+        id
+      }
+    }
   }
 }
 `
@@ -159,9 +177,13 @@ onBeforeUnmount(() => {
   }
 })
 
+const showConnectButton = computed(() => {
+  return userProjectStatusStore.project.isConfigLoaded && userProjectStatusStore.cloudStatusMatches('needsProjectConnect')
+})
+
 const emit = defineEmits<{
-  (event: 'continue', value: boolean): void
-  (event: 'connect-project'): void
+  (event: 'close'): void
+  (event: 'cancel'): void
 }>()
 
 const cloudViewer = computed(() => {
@@ -183,19 +205,22 @@ const loginMutationIsPending = computed(() => {
 })
 
 const handleLoginOrContinue = async () => {
-  if (cloudViewer.value) {
-    if (props.showConnectButtonAfterLogin) {
-      emit('connect-project')
-    } else {
-      emit('continue', true)
-    }
+  if (userProjectStatusStore.user.isLoggedIn) {
+    // user is already logged in, just emit close event & return early
+    emit('close')
 
     return
   }
 
+  // user has not already logged in, kick off the login process
+
   loginInitiated.value = true
 
   login.executeMutation({ utmMedium: props.utmMedium, utmContent: props.utmContent || null, utmSource: getUtmSource() })
+}
+
+const handleCancel = () => {
+  emit('cancel')
 }
 
 const handleLogout = () => {
@@ -208,10 +233,6 @@ const handleTryAgain = async () => {
   login.executeMutation({ utmMedium: props.utmMedium, utmContent: props.utmContent || null, utmSource: getUtmSource() })
 }
 
-const handleCancel = () => {
-  emit('continue', true)
-}
-
 const buttonText = computed(() => {
   const strings = {
     login: t('topNav.login.actionLogin'),
@@ -219,11 +240,11 @@ const buttonText = computed(() => {
     continue: t('topNav.login.actionContinue'),
   }
 
-  if (cloudViewer.value) {
-    if (props.showConnectButtonAfterLogin) {
-      return strings.connectProject
-    }
+  if (showConnectButton.value) {
+    return strings.connectProject
+  }
 
+  if (userProjectStatusStore.user.isLoggedIn) {
     return strings.continue
   }
 
@@ -231,7 +252,7 @@ const buttonText = computed(() => {
 })
 
 const buttonPrefixIcon = computed(() => {
-  return cloudViewer.value && props.showConnectButtonAfterLogin ? ChainIcon : undefined
+  return showConnectButton.value ? ChainIcon : undefined
 })
 
 </script>

@@ -4,6 +4,7 @@ import resolve from '@rollup/plugin-node-resolve'
 import commonjs from '@rollup/plugin-commonjs'
 import _ from 'lodash'
 import { readFileSync } from 'fs'
+import dts from 'rollup-plugin-dts'
 
 const pkg = JSON.parse(readFileSync('./package.json'))
 
@@ -13,6 +14,7 @@ export function createEntries (options) {
     formats,
     input,
     config = {},
+    dtsOptions = {},
   } = options
 
   const banner = `
@@ -33,7 +35,7 @@ export function createEntries (options) {
           check: format === 'es',
           tsconfigOverride: {
             compilerOptions: {
-              declaration: format === 'es',
+              declaration: false,
               target: 'es6',
               module: format === 'cjs' ? 'es2015' : 'esnext',
             },
@@ -67,5 +69,19 @@ export function createEntries (options) {
     console.log(`Building ${format}: ${finalConfig.output.file}`)
 
     return finalConfig
-  })
+  }).concat([{
+    input,
+    output: [{ file: 'dist/index.d.ts', format: 'es' }],
+    plugins: [
+      dts({ respectExternal: true, ...dtsOptions }),
+      {
+        name: 'cypress-types-reference',
+        // rollup-plugin-dts does not add '// <reference types="cypress" />' like rollup-plugin-typescript2 did so we add it here.
+        renderChunk (...[code]) {
+          return `/// <reference types="cypress" />\n\n${code}`
+        },
+      },
+    ],
+    external: config.external || [],
+  }])
 }

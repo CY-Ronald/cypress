@@ -1,4 +1,6 @@
 import debugFn from 'debug'
+import semverMajor from 'semver/functions/major'
+import type { UserConfig } from 'vite-5'
 import { getVite, Vite } from './getVite'
 import { createViteDevServerConfig } from './resolveConfig'
 
@@ -6,6 +8,7 @@ const debug = debugFn('cypress:vite-dev-server:devServer')
 
 const ALL_FRAMEWORKS = ['react', 'vue'] as const
 
+type ConfigHandler = UserConfig | (() => UserConfig | Promise<UserConfig>)
 export type ViteDevServerConfig = {
   specs: Cypress.Spec[]
   cypressConfig: Cypress.PluginConfigOptions
@@ -13,12 +16,21 @@ export type ViteDevServerConfig = {
   onConfigNotFound?: (devServer: 'vite', cwd: string, lookedIn: string[]) => void
 } & {
   framework?: typeof ALL_FRAMEWORKS[number] // Add frameworks here as we implement
-  viteConfig?: unknown // Derived from the user's webpack
+  viteConfig?: ConfigHandler // Derived from the user's vite config
 }
 
 export async function devServer (config: ViteDevServerConfig): Promise<Cypress.ResolvedDevServerConfig> {
   // This has to be the first thing we do as we need to source vite from their project's dependencies
   const vite = getVite(config)
+
+  let majorVersion: number | undefined = undefined
+
+  if (vite.version) {
+    majorVersion = semverMajor(vite.version)
+    debug(`Found vite version v${majorVersion}`)
+  } else {
+    debug(`vite version not found`)
+  }
 
   debug('Creating Vite Server')
   const server = await devServer.create(config, vite)

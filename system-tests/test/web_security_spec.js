@@ -75,7 +75,6 @@ describe('e2e web security', () => {
       browser: '!webkit', // TODO(webkit): fix+unskip
       spec: 'web_security.cy.js',
       config: {
-        experimentalSessionAndOrigin: true,
         pageLoadTimeout: 5000,
       },
       snapshot: true,
@@ -88,7 +87,6 @@ describe('e2e web security', () => {
       spec: 'web_security.cy.js',
       config: {
         chromeWebSecurity: false,
-        experimentalSessionAndOrigin: true,
       },
       snapshot: true,
       browser: ['chrome', 'electron'],

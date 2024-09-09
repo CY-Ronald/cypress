@@ -1,5 +1,6 @@
 import _ from 'lodash'
 import Debug from 'debug'
+// @ts-ignore
 import deepDiff from 'return-deep-diff'
 
 import errors, { ConfigValidationFailureInfo, CypressError } from '@packages/errors'
@@ -21,7 +22,7 @@ const debug = Debug('cypress:config:project')
 // TODO: any -> SetupFullConfigOptions in data-context/src/data/ProjectConfigManager.ts
 export function setupFullConfigWithDefaults (obj: any = {}, getFilesByGlob: any): Promise<FullConfig> {
   debug('setting config object %o', obj)
-  let { projectRoot, projectName, config, envFile, options, cliConfig } = obj
+  let { projectRoot, projectName, config, envFile, options, cliConfig, repoRoot } = obj
 
   // just force config to be an object so we dont have to do as much
   // work in our tests
@@ -35,6 +36,7 @@ export function setupFullConfigWithDefaults (obj: any = {}, getFilesByGlob: any)
   config.envFile = envFile
   config.projectRoot = projectRoot
   config.projectName = projectName
+  config.repoRoot = repoRoot
 
   // @ts-ignore
   return mergeDefaults(config, options, cliConfig, getFilesByGlob)
@@ -59,7 +61,7 @@ export function updateWithPluginValues (cfg: FullConfig, modifiedConfig: any, te
     }
 
     return errors.throwErr('CONFIG_VALIDATION_ERROR', 'configFile', configFile, validationResult)
-  })
+  }, testingType)
 
   debug('validate that there is no breaking config options added by setupNodeEvents')
 
@@ -104,8 +106,16 @@ export function updateWithPluginValues (cfg: FullConfig, modifiedConfig: any, te
     debug('resolved config object %o', cfg.resolved)
   }
 
+  const diffsClone = _.cloneDeep(diffs) ?? {}
+
   // merge cfg into overrides
-  const merged = _.defaultsDeep(diffs, cfg)
+  const merged = _.defaultsDeep(diffs, cfg) ?? {}
+
+  for (const [key, value] of Object.entries(diffsClone)) {
+    if (Array.isArray(value)) {
+      merged[key] = _.cloneDeep(value)
+    }
+  }
 
   debug('merged config object %o', merged)
 

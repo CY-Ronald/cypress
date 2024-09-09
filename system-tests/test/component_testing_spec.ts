@@ -14,7 +14,7 @@ describe('component testing projects', function () {
   systemTests.it('vueclivue2-configured', {
     project: 'vueclivue2-configured',
     testingType: 'component',
-    spec: 'src/components/HelloWorld.cy.js',
+    spec: 'src/**/*.cy.js',
     browser: 'electron',
     expectedExitCode: 0,
   })
@@ -43,11 +43,18 @@ describe('component testing projects', function () {
     expectedExitCode: 0,
   })
 
-  // TODO: Figure out correct dependencies to make Next.js, 11-12  work.
-  systemTests.it.skip('nextjs-configured', {
+  systemTests.it('nextjs-configured', {
     project: 'nextjs-configured',
     testingType: 'component',
     spec: 'components/button.cy.jsx',
+    browser: 'chrome',
+    expectedExitCode: 0,
+  })
+
+  systemTests.it('issue-25951-next-app', {
+    project: 'issue-25951-next-app',
+    testingType: 'component',
+    spec: 'src/pages/_app.cy.tsx',
     browser: 'chrome',
     expectedExitCode: 0,
   })
@@ -78,8 +85,8 @@ describe(`React major versions with Vite`, function () {
     it(`executes all of the tests for React v${majorVersion} with Vite`, function () {
       return systemTests.exec(this, {
         project: `react${majorVersion}`,
-        configFile: 'cypress-vite.config.ts',
-        spec: 'src/App.cy.jsx,src/Unmount.cy.jsx,src/UsingLegacyMount.cy.jsx,src/Rerendering.cy.jsx',
+        configFile: 'cypress-vite-default.config.ts',
+        spec: 'src/App.cy.jsx,src/Unmount.cy.jsx,src/UsingLegacyMount.cy.jsx,src/Rerendering.cy.jsx,src/mount.cy.jsx',
         testingType: 'component',
         browser: 'chrome',
         snapshot: true,
@@ -97,7 +104,7 @@ describe(`React major versions with Webpack`, function () {
       return systemTests.exec(this, {
         project: `react${majorVersion}`,
         configFile: 'cypress-webpack.config.ts',
-        spec: 'src/App.cy.jsx,src/Unmount.cy.jsx,src/UsingLegacyMount.cy.jsx,src/Rerendering.cy.jsx',
+        spec: 'src/App.cy.jsx,src/Unmount.cy.jsx,src/UsingLegacyMount.cy.jsx,src/Rerendering.cy.jsx,src/mount.cy.jsx',
         testingType: 'component',
         browser: 'chrome',
         snapshot: true,
@@ -107,16 +114,24 @@ describe(`React major versions with Webpack`, function () {
   }
 })
 
-const ANGULAR_MAJOR_VERSIONS = ['13', '14']
+const ANGULAR_VERSIONS = ['13', '14', '15', '16', '17']
 
-describe(`Angular CLI major versions`, () => {
+describe(`Angular CLI versions`, () => {
   systemTests.setup()
 
-  for (const majorVersion of ANGULAR_MAJOR_VERSIONS) {
-    const spec = `${majorVersion === '14' ? 'src/app/components/standalone.component.cy.ts,src/app/mount.cy.ts' : 'src/app/mount.cy.ts'}`
+  for (const version of ANGULAR_VERSIONS) {
+    let spec = 'src/**/*.cy.ts,!src/app/errors.cy.ts'
 
-    systemTests.it(`v${majorVersion} with mount tests`, {
-      project: `angular-${majorVersion}`,
+    if (version === '13') {
+      spec = `${spec},!src/app/components/standalone.component.cy.ts,!src/app/components/signals.component.cy.ts`
+    }
+
+    if (version === '14' || version === '15') {
+      spec = `${spec},!src/app/components/signals.component.cy.ts`
+    }
+
+    systemTests.it(`v${version} with mount tests`, {
+      project: `angular-${version}`,
       spec,
       testingType: 'component',
       browser: 'chrome',
@@ -131,6 +146,14 @@ describe(`Angular CLI major versions`, () => {
     browser: 'chrome',
     expectedExitCode: 0,
   })
+
+  systemTests.it('angular custom root', {
+    project: 'angular-custom-root',
+    spec: 'ui/app/app.component.cy.ts',
+    testingType: 'component',
+    browser: 'chrome',
+    expectedExitCode: 0,
+  })
 })
 
 describe('svelte component testing', () => {
@@ -140,11 +163,31 @@ describe('svelte component testing', () => {
     systemTests.it(`svelte + ${bundler}`, {
       project: `svelte-${bundler}`,
       testingType: 'component',
-      spec: '**/*.cy.js',
+      spec: '**/*.cy.js,!src/errors.cy.js',
       browser: 'chrome',
       expectedExitCode: 0,
     })
   }
+})
+
+describe('Vue major versions with Vite', () => {
+  systemTests.setup()
+
+  systemTests.it('vue 2', {
+    project: `vue2`,
+    testingType: 'component',
+    spec: '**/*.cy.js',
+    browser: 'chrome',
+    expectedExitCode: 0,
+  })
+
+  systemTests.it('vue 3', {
+    project: `vue3`,
+    testingType: 'component',
+    spec: '**/*.cy.js',
+    browser: 'chrome',
+    expectedExitCode: 0,
+  })
 })
 
 describe('experimentalSingleTabRunMode', function () {

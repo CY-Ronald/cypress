@@ -1,18 +1,21 @@
+/* eslint-disable no-dupe-class-members */
 import Bluebird from 'bluebird'
 import { EventEmitter } from 'events'
 import type { MobxRunnerStore } from '@packages/app/src/store/mobx-runner-store'
-import type { RunState } from '@packages/types/src/driver'
 import type MobX from 'mobx'
 import type { LocalBusEmitsMap, LocalBusEventMap, DriverToLocalBus, SocketToDriverMap } from './event-manager-types'
-import type { AutomationElementId, FileDetails } from '@packages/types'
+import type { RunState, CachedTestState, AutomationElementId, FileDetails, ReporterStartInfo, ReporterRunState } from '@packages/types'
 
 import { logger } from './logger'
-import type { Socket } from '@packages/socket/lib/browser'
-import * as cors from '@packages/network/lib/cors'
-import { automation, useRunnerUiStore } from '../store'
+import type { SocketShape } from '@packages/socket/lib/types'
+import { automation, useRunnerUiStore, useSpecStore } from '../store'
 import { useScreenshotStore } from '../store/screenshot-store'
 import { useStudioStore } from '../store/studio-store'
 import { getAutIframeModel } from '.'
+import { handlePausing } from './events/pausing'
+import { addTelemetryListeners } from './events/telemetry'
+import { telemetry } from '@packages/telemetry/src/browser'
+import { addCaptureProtocolListeners } from './events/capture-protocol'
 
 export type CypressInCypressMochaEvent = Array<Array<string | Record<string, any>>>
 
@@ -29,19 +32,18 @@ let crossOriginOnMessageRef = ({ data, source }: MessageEvent<{
   return undefined
 }
 let crossOriginLogs: {[key: string]: Cypress.Log} = {}
+let hasMochaRunEnded: boolean = false
 
 interface AddGlobalListenerOptions {
   element: AutomationElementId
   randomString: string
 }
 
-const driverToReporterEvents = 'paused session:add'.split(' ')
 const driverToLocalAndReporterEvents = 'run:start run:end'.split(' ')
 const driverToSocketEvents = 'backend:request automation:request mocha recorder:frame'.split(' ')
-const driverTestEvents = 'test:before:run:async test:after:run'.split(' ')
 const driverToLocalEvents = 'viewport:changed config stop url:changed page:loading visit:failed visit:blank cypress:in:cypress:runner:event'.split(' ')
 const socketRerunEvents = 'runner:restart watched:file:changed'.split(' ')
-const socketToDriverEvents = 'net:stubbing:event request:event script:error cross:origin:automation:cookies'.split(' ')
+const socketToDriverEvents = 'net:stubbing:event request:event script:error cross:origin:cookies'.split(' ')
 const localToReporterEvents = 'reporter:log:add reporter:log:state:changed reporter:log:remove'.split(' ')
 
 /**
@@ -56,7 +58,8 @@ export class EventManager {
   selectorPlaygroundModel: any
   cypressInCypressMochaEvents: CypressInCypressMochaEvent[] = []
   // Used for testing the experimentalSingleTabRunMode experiment. Ensures AUT is correctly destroyed between specs.
-  ws: Socket
+  ws: SocketShape
+  specStore: ReturnType<typeof useSpecStore>
   studioStore: ReturnType<typeof useStudioStore>
 
   constructor (
@@ -66,10 +69,11 @@ export class EventManager {
     private Mobx: typeof MobX,
     // selectorPlaygroundModel singleton
     selectorPlaygroundModel: any,
-    ws: Socket,
+    ws: SocketShape,
   ) {
     this.selectorPlaygroundModel = selectorPlaygroundModel
     this.ws = ws
+    this.specStore = useSpecStore()
     this.studioStore = useStudioStore()
   }
 
@@ -88,8 +92,7 @@ export class EventManager {
 
     const rerun = () => {
       if (!this) {
-        // if the tests have been reloaded
-        // then there is nothing to rerun
+        // if the tests have been reloaded then there is nothing to rerun
         return
       }
 
@@ -126,11 +129,13 @@ export class EventManager {
       runnerUiStore.setAutomationStatus(connected)
     })
 
-    this.ws.on('change:to:url', (url) => {
-      window.location.href = url
+    this.ws.on('update:telemetry:context', (contextString) => {
+      const context = JSON.parse(contextString)
+
+      telemetry.setRootContext(context)
     })
 
-    this.ws.on('automation:push:message', (msg, data = {}) => {
+    this.ws.on('automation:push:message', (msg, data: any = {}) => {
       if (!Cypress) return
 
       switch (msg) {
@@ -142,6 +147,9 @@ export class EventManager {
           break
         case 'complete:download':
           Cypress.downloads.end(data)
+          break
+        case 'canceled:download':
+          Cypress.downloads.end(data, true)
           break
         default:
           break
@@ -169,10 +177,6 @@ export class EventManager {
 
         Cypress.emit(event, ...args)
       })
-    })
-
-    this.ws.on('cross:origin:delaying:html', (request) => {
-      Cypress.primaryOriginCommunicator.emit('delaying:html', request)
     })
 
     localToReporterEvents.forEach((event) => {
@@ -232,18 +236,6 @@ export class EventManager {
 
     this.reporterBus.on('runner:unpin:snapshot', this._unpinSnapshot.bind(this))
 
-    this.reporterBus.on('runner:resume', () => {
-      if (!Cypress) return
-
-      Cypress.emit('resume:all')
-    })
-
-    this.reporterBus.on('runner:next', () => {
-      if (!Cypress) return
-
-      Cypress.emit('resume:next')
-    })
-
     this.reporterBus.on('runner:stop', () => {
       if (!Cypress) return
 
@@ -254,10 +246,14 @@ export class EventManager {
       this.saveState(state)
     })
 
-    this.reporterBus.on('clear:session', () => {
+    this.reporterBus.on('testFilter:cloudDebug:dismiss', () => {
+      this.emit('testFilter:cloudDebug:dismiss', undefined)
+    })
+
+    this.reporterBus.on('clear:all:sessions', () => {
       if (!Cypress) return
 
-      Cypress.backend('clear:session')
+      Cypress.backend('clear:sessions', true)
       .then(rerun)
     })
 
@@ -341,14 +337,19 @@ export class EventManager {
     // @ts-ignore
     const $window = this.$CypressDriver.$(window)
 
-    // This is a test-only even. It's used to
-    // trigger a re-reun for the drive rerun.cy.js spec.
+    // This is a test-only event. It's used to
+    // trigger a rerun for the driver rerun.cy.js spec.
     $window.on('test:trigger:rerun', rerun)
 
     // when we actually unload then
     // nuke all of the cookies again
     // so we clear out unload
-    $window.on('unload', () => {
+    // While we must move to pagehide for Chromium, it does not work for our
+    // needs in Firefox. Until that is addressed, only Chromium uses the pagehide
+    // event as a proxy for AUT unloads.
+    const unloadEvent = this.isBrowser({ family: 'chromium' }) ? 'pagehide' : 'unload'
+
+    $window.on(unloadEvent, (e) => {
       this._clearAllCookies()
     })
 
@@ -359,6 +360,7 @@ export class EventManager {
     // that Cypress knows not to set any more
     // cookies
     $window.on('beforeunload', () => {
+      telemetry.getSpan('cypress:app')?.end()
       this.reporterBus.emit('reporter:restart:test:run')
 
       this._clearAllCookies()
@@ -372,7 +374,23 @@ export class EventManager {
     }
   }
 
-  setup (config) {
+  async setup (config) {
+    this.ws.emit('watch:test:file', config.spec)
+
+    if (config.isTextTerminal || config.experimentalInteractiveRunEvents) {
+      await new Promise((resolve, reject) => {
+        this.ws.emit('plugins:before:spec', config.spec, (res?: { error: Error }) => {
+          // FIXME: handle surfacing the error to the browser instead of hanging with
+          // 'Your tests are loading...' message. Fix in https://github.com/cypress-io/cypress/issues/23627
+          if (res && res.error) {
+            reject(res.error)
+          }
+
+          resolve(null)
+        })
+      })
+    }
+
     Cypress = this.Cypress = this.$CypressDriver.create(config)
 
     // expose Cypress globally
@@ -380,12 +398,6 @@ export class EventManager {
     window.Cypress = Cypress
 
     this._addListeners()
-
-    this.ws.emit('watch:test:file', config.spec)
-
-    if (config.isTextTerminal || config.experimentalInteractiveRunEvents) {
-      this.ws.emit('plugins:before:spec', config.spec)
-    }
   }
 
   isBrowser (browserName) {
@@ -397,53 +409,55 @@ export class EventManager {
   initialize ($autIframe: JQuery<HTMLIFrameElement>, config: Record<string, any>) {
     performance.mark('initialize-start')
 
+    const testFilter = this.specStore.testFilter
+
     return Cypress.initialize({
       $autIframe,
       onSpecReady: () => {
-        // get the current runnable in case we reran mid-test due to a visit
-        // to a new domain
-        this.ws.emit('get:existing:run:state', (state: RunState = {}) => {
+        // get the current runnable states and cached test state
+        // in case we reran mid-test due to a visit to a new domain
+        this.ws.emit('get:cached:test:state', (runState: RunState = {}, testState: CachedTestState) => {
           if (!Cypress.runner) {
             // the tests have been reloaded
             return
           }
 
-          const hideCommandLog = window.__CYPRESS_CONFIG__.hideCommandLog
+          const hideCommandLog = Cypress.config('hideCommandLog')
 
-          this.studioStore.initialize(config, state)
+          this.studioStore.initialize(config, runState)
 
-          const runnables = Cypress.runner.normalizeAll(state.tests, hideCommandLog)
+          const runnables = Cypress.runner.normalizeAll(runState.tests, hideCommandLog, testFilter)
 
           const run = () => {
             performance.mark('initialize-end')
             performance.measure('initialize', 'initialize-start', 'initialize-end')
 
-            this._runDriver(state)
+            this._runDriver(runState, testState)
           }
 
           if (!hideCommandLog) {
             this.reporterBus.emit('runnables:ready', runnables)
           }
 
-          if (state?.numLogs) {
-            Cypress.runner.setNumLogs(state.numLogs)
+          if (runState?.numLogs) {
+            Cypress.runner.setNumLogs(runState.numLogs)
           }
 
-          if (state.startTime) {
-            Cypress.runner.setStartTime(state.startTime)
+          if (runState.startTime) {
+            Cypress.runner.setStartTime(runState.startTime)
           }
 
-          if (config.isTextTerminal && !state.currentId) {
+          if (config.isTextTerminal && !runState.currentId) {
             // we are in run mode and it's the first load
-            // store runnables in backend and maybe send to dashboard
+            // store runnables in backend and maybe send to Cypress Cloud
             return this.ws.emit('set:runnables:and:maybe:record:tests', runnables, run)
           }
 
-          if (state.currentId) {
+          if (runState.currentId) {
             // if we have a currentId it means
             // we need to tell the Cypress to skip
             // ahead to that test
-            Cypress.runner.resumeAtTest(state.currentId, state.emissions)
+            Cypress.runner.resumeAtTest(runState.currentId, runState.emissions)
           }
 
           return run()
@@ -453,6 +467,12 @@ export class EventManager {
   }
 
   _addListeners () {
+    addTelemetryListeners(Cypress)
+
+    if (Cypress.config('protocolEnabled')) {
+      addCaptureProtocolListeners(Cypress)
+    }
+
     Cypress.on('message', (msg, data, cb) => {
       this.ws.emit('client:request', msg, data, cb)
     })
@@ -464,12 +484,12 @@ export class EventManager {
     })
 
     Cypress.on('collect:run:state', () => {
-      if (Cypress.env('NO_COMMAND_LOG')) {
+      if (Cypress.config('hideCommandLog')) {
         return Bluebird.resolve()
       }
 
       return new Bluebird((resolve) => {
-        this.reporterBus.emit('reporter:collect:run:state', (reporterState) => {
+        this.reporterBus.emit('reporter:collect:run:state', (reporterState: ReporterRunState) => {
           resolve({
             ...reporterState,
             studio: {
@@ -512,7 +532,7 @@ export class EventManager {
     const screenshotStore = useScreenshotStore()
 
     const handleBeforeScreenshot = (config, cb) => {
-      if (config.appOnly) {
+      if (config.appOnly || Cypress.config('hideRunnerUi')) {
         screenshotStore.setScreenshotting(true)
       }
 
@@ -521,7 +541,7 @@ export class EventManager {
         cb()
       }
 
-      if (Cypress.env('NO_COMMAND_LOG')) {
+      if (Cypress.config('hideCommandLog')) {
         return beforeThenCb()
       }
 
@@ -545,23 +565,25 @@ export class EventManager {
 
     Cypress.on('after:screenshot', handleAfterScreenshot)
 
-    driverToReporterEvents.forEach((event) => {
-      Cypress.on(event, (...args) => {
-        this.reporterBus.emit(event, ...args)
-      })
-    })
-
-    driverTestEvents.forEach((event) => {
-      Cypress.on(event, (test, cb) => {
-        this.reporterBus.emit(event, test, cb)
-      })
-    })
-
     driverToLocalAndReporterEvents.forEach((event) => {
       Cypress.on(event, (...args) => {
         this.localBus.emit(event, ...args)
         this.reporterBus.emit(event, ...args)
       })
+    })
+
+    Cypress.on('run:start', async () => {
+      hasMochaRunEnded = false
+      if (Cypress.config('experimentalMemoryManagement') && Cypress.isBrowser({ family: 'chromium' })) {
+        await Cypress.backend('start:memory:profiling', Cypress.config('spec'))
+      }
+    })
+
+    Cypress.on('run:end', async () => {
+      hasMochaRunEnded = true
+      if (Cypress.config('experimentalMemoryManagement') && Cypress.isBrowser({ family: 'chromium' })) {
+        await Cypress.backend('end:memory:profiling')
+      }
     })
 
     driverToLocalEvents.forEach((event) => {
@@ -570,6 +592,12 @@ export class EventManager {
         // is emitted from cypress/driver when running e2e tests using
         // "cypress in cypress"
         if (event === 'cypress:in:cypress:runner:event') {
+          // TODO: we sometimes receive multiple mocha:start events
+          // which causes the the mochaEvent snapshots to fail. We should investigate further.
+          if (args[0] === 'mocha' && args[1] === 'start') {
+            this.cypressInCypressMochaEvents = []
+          }
+
           this.cypressInCypressMochaEvents.push(args as CypressInCypressMochaEvent[])
 
           if (args[0] === 'mocha' && args[1] === 'end') {
@@ -593,90 +621,82 @@ export class EventManager {
       this.localBus.emit('script:error', err)
     })
 
-    Cypress.on('test:before:run:async', (_attr, test) => {
+    Cypress.on('test:before:run:async', async (...args) => {
+      crossOriginLogs = {}
+      const [attributes, test] = args
+
+      this.reporterBus.emit('test:before:run:async', attributes)
+
       this.studioStore.interceptTest(test)
+
+      // if the experimental flag is on and we are in a chromium based browser,
+      // check the memory pressure to determine if garbage collection is needed
+      if (Cypress.config('experimentalMemoryManagement') && Cypress.isBrowser({ family: 'chromium' })) {
+        await Cypress.backend('check:memory:pressure', {
+          test: { title: attributes.title, order: attributes.order, currentRetry: attributes.currentRetry },
+        })
+      }
+
+      Cypress.primaryOriginCommunicator.toAllSpecBridges('test:before:run:async', ...args)
     })
 
-    Cypress.on('test:after:run', (test) => {
-      if (this.studioStore.isOpen && test.state !== 'passed') {
+    Cypress.on('test:before:after:run:async', (...args) => {
+      Cypress.primaryOriginCommunicator.toAllSpecBridges('test:before:after:run:async', ...args)
+    })
+
+    Cypress.on('test:after:run', (attributes) => {
+      this.reporterBus.emit('test:after:run', attributes, Cypress.config('isInteractive'))
+
+      if (this.studioStore.isOpen && attributes.state !== 'passed') {
         this.studioStore.testFailed()
       }
     })
+
+    handlePausing(this.getCypress, this.reporterBus)
 
     Cypress.on('test:before:run', (...args) => {
       Cypress.primaryOriginCommunicator.toAllSpecBridges('test:before:run', ...args)
     })
 
-    Cypress.on('test:before:run:async', (...args) => {
-      Cypress.primaryOriginCommunicator.toAllSpecBridges('test:before:run:async', ...args)
-    })
-
     // Inform all spec bridges that the primary origin has begun to unload.
     Cypress.on('window:before:unload', () => {
-      Cypress.primaryOriginCommunicator.toAllSpecBridges('before:unload')
+      Cypress.primaryOriginCommunicator.toAllSpecBridges('before:unload', window.origin)
     })
 
-    Cypress.on('request:snapshot:from:spec:bridge', ({ log, name, options, specBridge, addSnapshot }: {
-      log: Cypress.Log
-      name?: string
-      options?: any
-      specBridge: string
-      addSnapshot: (snapshot: any, options: any, shouldRebindSnapshotFn: boolean) => Cypress.Log
-    }) => {
-      const eventID = log.get('id')
-
-      Cypress.primaryOriginCommunicator.once(`snapshot:for:log:generated:${eventID}`, (generatedCrossOriginSnapshot) => {
-        const snapshot = generatedCrossOriginSnapshot.body ? generatedCrossOriginSnapshot : null
-
-        addSnapshot.apply(log, [snapshot, options, false])
-      })
-
-      Cypress.primaryOriginCommunicator.toSpecBridge(specBridge, 'generate:snapshot:for:log', {
-        name,
-        id: eventID,
-      })
+    // Reflect back to the requesting origin the status of the 'duringUserTestExecution' state
+    Cypress.primaryOriginCommunicator.on('sync:during:user:test:execution', (_data, { origin, responseEvent }) => {
+      Cypress.primaryOriginCommunicator.toSpecBridge(origin, responseEvent, cy.state('duringUserTestExecution'))
     })
 
-    Cypress.primaryOriginCommunicator.on('window:load', ({ url }, originPolicy) => {
-      // Sync stable if the expected origin has loaded.
-      // Only listen to window load events from the most recent secondary origin, This prevents nondeterminism in the case where we redirect to an already
-      // established spec bridge, but one that is not the current or next cy.origin command.
-      if (cy.state('latestActiveOriginPolicy') === originPolicy) {
-        // We remain in an anticipating state until either a load even happens or a timeout.
-        cy.state('autOrigin', cy.state('autOrigin', cors.getOriginPolicy(url)))
-        cy.isAnticipatingCrossOriginResponseFor(undefined)
-        cy.isStable(true, 'load')
-        // Prints out the newly loaded URL
-        Cypress.emit('internal:window:load', { type: 'cross:origin', url })
-        // Re-broadcast to any other specBridges.
-        Cypress.primaryOriginCommunicator.toAllSpecBridges('window:load', { url })
+    Cypress.primaryOriginCommunicator.on('before:unload', (origin) => {
+      // In webkit the before:unload event could come in after the on load event has already happened.
+      // To prevent hanging we will only set the state to unstable if we are currently on the same origin as the unload event,
+      // otherwise we assume that the load event has already occurred and the event is no longer relevant.
+      if (Cypress.state('autLocation')?.origin === origin) {
+        // We specifically don't call 'cy.isStable' here because we don't want to inject another load event.
+        cy.state('isStable', false)
       }
-    })
 
-    Cypress.primaryOriginCommunicator.on('before:unload', () => {
-      // We specifically don't call 'cy.isStable' here because we don't want to inject another load event.
-      // Unstable is unstable regardless of where it initiated from.
-      cy.state('isStable', false)
       // Re-broadcast to any other specBridges.
-      Cypress.primaryOriginCommunicator.toAllSpecBridges('before:unload')
+      Cypress.primaryOriginCommunicator.toAllSpecBridges('before:unload', origin)
     })
 
-    Cypress.primaryOriginCommunicator.on('expect:origin', (originPolicy) => {
-      this.localBus.emit('expect:origin', originPolicy)
+    Cypress.primaryOriginCommunicator.on('expect:origin', (origin) => {
+      this.localBus.emit('expect:origin', origin)
     })
 
-    Cypress.primaryOriginCommunicator.on('viewport:changed', (viewport, originPolicy) => {
+    Cypress.primaryOriginCommunicator.on('viewport:changed', (viewport, { origin }) => {
       const callback = () => {
-        Cypress.primaryOriginCommunicator.toSpecBridge(originPolicy, 'viewport:changed:end')
+        Cypress.primaryOriginCommunicator.toSpecBridge(origin, 'viewport:changed:end')
       }
 
       Cypress.primaryOriginCommunicator.emit('sync:viewport', viewport)
       this.localBus.emit('viewport:changed', viewport, callback)
     })
 
-    Cypress.primaryOriginCommunicator.on('before:screenshot', (config, originPolicy) => {
+    Cypress.primaryOriginCommunicator.on('before:screenshot', (config, { origin }) => {
       const callback = () => {
-        Cypress.primaryOriginCommunicator.toSpecBridge(originPolicy, 'before:screenshot:end')
+        Cypress.primaryOriginCommunicator.toSpecBridge(origin, 'before:screenshot:end')
       }
 
       handleBeforeScreenshot(config, callback)
@@ -689,8 +709,8 @@ export class EventManager {
     Cypress.primaryOriginCommunicator.on('after:screenshot', handleAfterScreenshot)
 
     Cypress.primaryOriginCommunicator.on('log:added', (attrs) => {
-      // If the test is over and the user enters interactive snapshot mode, do not add cross origin logs to the test runner.
-      if (Cypress.state('test')?.final) return
+      // If the mocha run is over and the user enters interactive snapshot mode, do not add cross origin logs to the test runner.
+      if (hasMochaRunEnded) return
 
       // Create a new local log representation of the cross origin log.
       // It will be attached to the current command.
@@ -704,6 +724,45 @@ export class EventManager {
 
       // this will trigger a log changed event for the log itself.
       log?.set(attrs)
+    })
+
+    // This message comes from the AUT, not the spec bridge. This is called in
+    // the event that cookies are set via document.cookie in a cross origin
+    // AUT prior to attaching a spec bridge.
+    Cypress.primaryOriginCommunicator.on(
+      'aut:set:cookie',
+      (options: { cookie, url: string, sameSiteContext: string }) => {
+        // unlikely there will be errors, but ignore them in any case, since
+        // they're not user-actionable
+        Cypress.automation('set:cookie', options.cookie).catch(() => {})
+        Cypress.backend('cross:origin:set:cookie', options).catch(() => {})
+      },
+    )
+
+    /**
+     * Call a backend request for the requesting spec bridge since we cannot have websockets in the spec bridges.
+     * Return it's response.
+     */
+    Cypress.primaryOriginCommunicator.on('backend:request', async ({ args }, { source, responseEvent }) => {
+      let response
+
+      try {
+        response = await Cypress.backend(...args)
+      } catch (error) {
+        response = { error }
+      }
+
+      Cypress.primaryOriginCommunicator.toSource(source, responseEvent, response)
+    })
+
+    /**
+     * Call an automation request for the requesting spec bridge since we cannot have websockets in the spec bridges.
+     * Return it's response.
+     */
+    Cypress.primaryOriginCommunicator.on('automation:request', async ({ args }, { source, responseEvent }) => {
+      const response = await Cypress.automation(...args)
+
+      Cypress.primaryOriginCommunicator.toSource(source, responseEvent, response)
     })
 
     // The window.top should not change between test reloads, and we only need to bind the message event when Cypress is recreated
@@ -729,9 +788,9 @@ export class EventManager {
     window.top.addEventListener('message', crossOriginOnMessageRef, false)
   }
 
-  _runDriver (state) {
+  _runDriver (runState: RunState, testState: CachedTestState) {
     performance.mark('run-s')
-    Cypress.run(() => {
+    Cypress.run(testState, () => {
       performance.mark('run-e')
       performance.measure('run', 'run-s', 'run-e')
     })
@@ -740,19 +799,24 @@ export class EventManager {
 
     this.reporterBus.emit('reporter:start', {
       startTime: Cypress.runner.getStartTime(),
-      numPassed: state.passed,
-      numFailed: state.failed,
-      numPending: state.pending,
-      autoScrollingEnabled: state.autoScrollingEnabled,
-      isSpecsListOpen: state.isSpecsListOpen,
-      scrollTop: state.scrollTop,
+      numPassed: runState.passed,
+      numFailed: runState.failed,
+      numPending: runState.pending,
+      autoScrollingEnabled: runState.autoScrollingEnabled,
+      isSpecsListOpen: runState.isSpecsListOpen,
+      scrollTop: runState.scrollTop,
       studioActive: hasRunnableId,
-    })
+    } as ReporterStartInfo)
   }
 
   stop () {
     this.localBus.removeAllListeners()
+
+    // Grab existing listeners for url change event, we want to preserve them
+    const urlChangeListeners = this.ws.listeners('change:to:url')
+
     this.ws.off()
+    urlChangeListeners.forEach((listener) => this.ws.on('change:to:url', listener))
   }
 
   async teardown (state: MobxRunnerStore, isRerun = false) {
@@ -763,8 +827,8 @@ export class EventManager {
     state.setIsLoading(true)
 
     if (!isRerun) {
-      // only clear session state when a new spec is selected
-      Cypress.backend('reset:session:state')
+      // only clear test state when a new spec is selected
+      Cypress.backend('reset:cached:test:state')
     }
 
     // when we are re-running we first need to stop cypress always
@@ -773,7 +837,6 @@ export class EventManager {
     Cypress.primaryOriginCommunicator.removeAllListeners()
     // clean up the cross origin logs in memory to prevent dangling references as the log objects themselves at this point will no longer be needed.
     crossOriginLogs = {}
-
     this.studioStore.setInactive()
   }
 
@@ -842,9 +905,9 @@ export class EventManager {
     this.ws.emit('spec:changed', specFile)
   }
 
-  notifyCrossOriginBridgeReady (originPolicy) {
+  notifyCrossOriginBridgeReady (origin) {
     // Any multi-origin event appends the origin as the third parameter and we do the same here for this short circuit
-    Cypress.primaryOriginCommunicator.emit('bridge:ready', undefined, originPolicy)
+    Cypress.primaryOriginCommunicator.emit('bridge:ready', undefined, { origin })
   }
 
   snapshotUnpinned () {

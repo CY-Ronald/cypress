@@ -21,6 +21,7 @@ export const monorepoPaths = {
   pkgLaunchpad: path.join(__dirname, '../../packages/launchpad'),
   pkgNetStubbing: path.join(__dirname, '../../packages/net-stubbing'),
   pkgNetwork: path.join(__dirname, '../../packages/network'),
+  pkgPackherdRequire: path.join(__dirname, '../../packages/packherd-require'),
   pkgProxy: path.join(__dirname, '../../packages/proxy'),
   pkgReporter: path.join(__dirname, '../../packages/reporter'),
   pkgResolveDist: path.join(__dirname, '../../packages/resolve-dist'),
@@ -30,8 +31,9 @@ export const monorepoPaths = {
   pkgScaffoldConfig: path.join(__dirname, '../../packages/scaffold-config'),
   pkgServer: path.join(__dirname, '../../packages/server'),
   pkgSocket: path.join(__dirname, '../../packages/socket'),
+  pkgTelemetry: path.join(__dirname, '../../packages/telemetry'),
   pkgTs: path.join(__dirname, '../../packages/ts'),
   pkgTypes: path.join(__dirname, '../../packages/types'),
-  pkgUiComponents: path.join(__dirname, '../../packages/ui-components'),
+  pkgV8SnapshotRequire: path.join(__dirname, '../../packages/v8-snapshot-require'),
   pkgWebConfig: path.join(__dirname, '../../packages/web-config')
 } as const

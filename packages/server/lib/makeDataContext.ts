@@ -15,12 +15,13 @@ import type {
 } from '@packages/types'
 
 import browserUtils from './browsers/utils'
-import auth from './gui/auth'
-import user from './user'
+import auth from './cloud/auth'
+import user from './cloud/user'
+import cohorts from './cohorts'
 import { openProject } from './open_project'
 import cache from './cache'
 import { graphqlSchema } from '@packages/graphql/src/schema'
-import { openExternal } from '@packages/server/lib/gui/links'
+import { openExternal } from './gui/links'
 import { getUserEditor } from './util/editors'
 import * as savedState from './saved_state'
 import appData from './util/app_data'
@@ -46,7 +47,7 @@ export function makeDataContext (options: MakeDataContextOptions): DataContext {
       close: browsers.close,
       getBrowsers,
       async ensureAndGetByNameOrPath (nameOrPath: string) {
-        const browsers = await ctx.browser.machineBrowsers()
+        const browsers = await ctx.browser.allBrowsers()
 
         return await ensureAndGetByNameOrPath(nameOrPath, false, browsers)
       },
@@ -154,6 +155,18 @@ export function makeDataContext (options: MakeDataContextOptions): DataContext {
         return devServer
       },
       isListening,
+      resetBrowserTabsForNextSpec (shouldKeepTabOpen: boolean) {
+        return openProject.resetBrowserTabsForNextSpec(shouldKeepTabOpen)
+      },
+      resetServer () {
+        return openProject.getProject()?.server.reset()
+      },
+      async runSpec (spec: Cypress.Spec): Promise<void> {
+        openProject.changeUrlToSpec(spec)
+      },
+      routeToDebug (runNumber: number) {
+        openProject.changeUrlToDebug(runNumber)
+      },
     },
     electronApi: {
       openExternal (url: string) {
@@ -179,6 +192,9 @@ export function makeDataContext (options: MakeDataContextOptions): DataContext {
       focusMainWindow () {
         return focusMainWindow()
       },
+      createNotification (title, body) {
+        return new electron.Notification({ title, body })
+      },
     },
     localSettingsApi: {
       async setPreferences (object: AllowedState) {
@@ -193,6 +209,17 @@ export function makeDataContext (options: MakeDataContextOptions): DataContext {
         const { availableEditors } = await getUserEditor(true)
 
         return availableEditors
+      },
+    },
+    cohortsApi: {
+      async getCohorts () {
+        return cohorts.get()
+      },
+      async getCohort (name: string) {
+        return cohorts.getByName(name)
+      },
+      async insertCohort (cohort) {
+        cohorts.set(cohort)
       },
     },
   })

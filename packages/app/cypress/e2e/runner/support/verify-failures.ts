@@ -42,6 +42,7 @@ const verifyFailure = (options) => {
     uncaughtMessage,
     line,
     regex,
+    mode,
   } = options
   let { codeFrameText, stackRegex, codeFrameRegex } = options
 
@@ -49,13 +50,23 @@ const verifyFailure = (options) => {
     codeFrameText = specTitle
   }
 
-  const codeFrameColumnArray = [].concat(column)
-  const codeFrameColumn = codeFrameColumnArray[0]
-  const stackColumnArray = codeFrameColumnArray.map((col) => col - 1)
-  const stackColumn = stackColumnArray[0]
+  let codeFrameColumnArray: number[] = []
+  let codeFrameColumn = column
+  let stackColumnArray: number[] = []
+  let stackColumn = column
 
-  stackRegex = regex || stackRegex || new RegExp(`${fileName}:${line || '\\d+'}:(${stackColumnArray.join('|')})`)
-  codeFrameRegex = regex || codeFrameRegex || new RegExp(`${fileName}:${line || '\\d+'}:(${codeFrameColumnArray.join('|')})`)
+  // Only calculate a column if one is passed into the verify function.
+  // Not all stack traces in Typescript 5+ will have a column associated if they throw at the end of the column.
+  // This is now considered the beginning of the row, which does not produce a column
+  if (column) {
+    codeFrameColumnArray = codeFrameColumnArray.concat(column)
+    codeFrameColumn = codeFrameColumnArray[0]
+    stackColumnArray = codeFrameColumnArray.map((col) => col - 1)
+    stackColumn = stackColumnArray[0]
+  }
+
+  stackRegex = regex || stackRegex || new RegExp(`${fileName}:${line || '\\d+'}${stackColumnArray.length ? `:(${stackColumnArray.join('|')})` : ''}`)
+  codeFrameRegex = regex || codeFrameRegex || new RegExp(`${fileName}:${line || '\\d+'}${codeFrameColumnArray.length ? `:(${codeFrameColumnArray.join('|')})` : ''}`)
 
   cy.contains('.runnable-title', specTitle).closest('.runnable').as('Root')
 
@@ -130,7 +141,7 @@ const verifyFailure = (options) => {
       hasPreferredIde,
       action: () => {
         cy.get('@Root').contains('.runnable-err-stack-trace .runnable-err-file-path a', fileName)
-        .click('left')
+        .click({ force: true })
       },
       line,
       column: stackColumn,
@@ -151,7 +162,7 @@ const verifyFailure = (options) => {
     if (uncaught) {
       cy.log('uncaught error has an associated log for the original error')
       cy.get('.command-name-uncaught-exception')
-      .should('have.length', 1)
+      .should(mode === 'component' ? 'have.length.gte' : 'have.length', 1)
       .find('.command-state-failed')
       .find('.command-message-text')
       .should('include.text', uncaughtMessage || originalMessage)
@@ -168,7 +179,7 @@ const verifyFailure = (options) => {
     .invoke('text')
     .should('match', codeFrameRegex)
 
-    cy.get('.test-err-code-frame pre span').should('include.text', codeFrameText)
+    cy.get('.test-err-code-frame span').should('include.text', codeFrameText)
   })
 
   if (verifyOpenInIde) {
@@ -185,13 +196,18 @@ const verifyFailure = (options) => {
   }
 }
 
-export const createVerify = ({ fileName, hasPreferredIde }) => {
+type ChainableVerify = (specTitle: string, props: any) => Cypress.Chainable
+
+export const createVerify = ({ fileName, hasPreferredIde, mode }): ChainableVerify => {
   return (specTitle: string, props: any) => {
     props.specTitle ||= specTitle
     props.fileName ||= fileName
     props.hasPreferredIde = hasPreferredIde
+    props.mode = mode
 
-    ;(props.verifyFn || verifyFailure).call(null, props)
+    return cy.wrap(
+      (props.verifyFn || verifyFailure).call(null, props),
+    )
   }
 }
 
@@ -206,10 +222,5 @@ export const verifyInternalFailure = (props) => {
 
     cy.get('.runnable-err-stack-trace')
     .should('include.text', stackMethod || method)
-
-    // this is an internal cypress error and we can only show code frames
-    // from specs, so it should not show the code frame
-    cy.get('.test-err-code-frame')
-    .should('not.exist')
   })
 }

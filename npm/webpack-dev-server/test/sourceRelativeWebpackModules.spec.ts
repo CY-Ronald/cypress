@@ -38,13 +38,18 @@ const WEBPACK_REACT: Partial<Record<ProjectDirs[number], {
     webpackDevServer: 4,
     htmlWebpackPlugin: 5,
   },
+  'webpack5_wds5-react': {
+    webpack: 5,
+    webpackDevServer: 5,
+    htmlWebpackPlugin: 5,
+  },
 }
 
 async function sourceModulesForProject (fixture: ProjectDirs[number]) {
   Fixtures.remove()
   const projectRoot = await Fixtures.scaffoldProject(fixture)
 
-  await FixturesScaffold.scaffoldProjectNodeModules(fixture)
+  await FixturesScaffold.scaffoldProjectNodeModules({ project: fixture })
 
   const result = sourceDefaultWebpackDependencies({
     cypressConfig: {

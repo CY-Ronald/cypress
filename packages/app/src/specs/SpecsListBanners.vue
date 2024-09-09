@@ -4,11 +4,11 @@
     v-model="showSpecNotFound"
     status="error"
     :title="t('specPage.noSpecError.title')"
-    class="mb-16px"
+    class="mb-[16px]"
     :icon="WarningIcon"
     dismissible
   >
-    <p class="mb-24px">
+    <p class="mb-[24px]">
       {{ t('specPage.noSpecError.intro') }} <InlineCodeFragment variant="error">
         {{ route.params.unrunnable }}
       </InlineCodeFragment>
@@ -21,11 +21,11 @@
     data-cy="offline-alert"
     status="warning"
     :title="t('specPage.offlineWarning.title')"
-    class="mb-16px"
+    class="mb-[16px]"
     :icon="WarningIcon"
     dismissible
   >
-    <p class="mb-24px">
+    <p class="mb-[24px]">
       {{ t('specPage.offlineWarning.explainer') }}
     </p>
   </Alert>
@@ -34,7 +34,7 @@
     v-model="showFetchError"
     status="warning"
     :title="t('specPage.fetchFailedWarning.title')"
-    class="mb-16px"
+    class="mb-[16px]"
     :icon="WarningIcon"
     dismissible
   >
@@ -56,7 +56,7 @@
     </p>
     <Button
       :prefix-icon="RefreshIcon"
-      class="mt-24px"
+      class="mt-[24px]"
       data-cy="refresh-button"
       @click="emit('refetchFailedCloudData')"
     >
@@ -69,11 +69,11 @@
     data-cy="project-not-found-alert"
     status="warning"
     :title="t('runs.errors.notFound.title')"
-    class="mb-16px"
+    class="mb-[16px]"
     :icon="WarningIcon"
     dismissible
   >
-    <p class="mb-24px">
+    <p class="mb-[24px]">
       <i18n-t
         scope="global"
         keypath="runs.errors.notFound.description"
@@ -88,9 +88,9 @@
     </p>
     <Button
       :prefix-icon="ConnectIcon"
-      class="mt-24px"
+      class="mt-[24px]"
       data-cy="reconnect-button"
-      @click="emit('reconnectProject')"
+      @click="userProjectStatusStore.openLoginConnectModal({utmMedium: 'Tests Tab'})"
     >
       {{ t('runs.errors.notFound.button') }}
     </Button>
@@ -101,34 +101,24 @@
     data-cy="project-request-access-alert"
     status="warning"
     :title="t('specPage.unauthorizedBannerTitle')"
-    class="mb-16px"
+    class="mb-[16px]"
     :icon="WarningIcon"
     dismissible
   >
-    <p class="mb-24px">
+    <p class="mb-[24px]">
       {{ props.hasRequestedAccess ? t('runs.errors.unauthorizedRequested.description') : t('runs.errors.unauthorized.description') }}
     </p>
     <RequestAccessButton :gql="props.gql" />
   </Alert>
-  <RecordBanner
-    v-else-if="showRecordBanner"
-    v-model="showRecordBanner"
-    :has-banner-been-shown="hasRecordBannerBeenShown"
-  />
-  <ConnectProjectBanner
-    v-else-if="showConnectBanner"
-    v-model="showConnectBanner"
-    :has-banner-been-shown="hasConnectBannerBeenShown"
-  />
-  <CreateOrganizationBanner
-    v-else-if="showCreateOrganizationBanner"
-    v-model="showCreateOrganizationBanner"
-    :has-banner-been-shown="hasCreateOrganizationBannerBeenShown"
-  />
-  <LoginBanner
-    v-else-if="showLoginBanner"
-    v-model="showLoginBanner"
-    :has-banner-been-shown="hasLoginBannerBeenShown"
+
+  <component
+    :is="bannerComponentToShow"
+    v-else-if="bannerComponentToShow"
+    :has-banner-been-shown="hasCurrentBannerBeenShown"
+    :cohort-option="currentCohortOption.cohort"
+    :framework="ctFramework"
+    :bundler="ctBundler"
+    :machine-id="props.gql.machineId"
   />
 </template>
 
@@ -143,16 +133,20 @@ import ConnectIcon from '~icons/cy/chain-link_x16.svg'
 import WarningIcon from '~icons/cy/warning_x16.svg'
 import RefreshIcon from '~icons/cy/action-restart_x16'
 import { useRoute } from 'vue-router'
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, Ref } from 'vue'
 import RequestAccessButton from './RequestAccessButton.vue'
-import { gql, useSubscription } from '@urql/vue'
+import { gql } from '@urql/vue'
 import { SpecsListBannersFragment, SpecsListBanners_CheckCloudOrgMembershipDocument } from '../generated/graphql'
-import interval from 'human-interval'
 import { AllowedState, BannerIds } from '@packages/types'
-import { LoginBanner, CreateOrganizationBanner, ConnectProjectBanner, RecordBanner } from './banners'
+import { LoginBanner, ComponentTestingAvailableBanner, CreateOrganizationBanner, ConnectProjectBanner, RecordBanner } from './banners'
+import { useUserProjectStatusStore } from '@packages/frontend-shared/src/store/user-project-status-store'
+import { usePromptManager } from '@packages/frontend-shared/src/gql-components/composables/usePromptManager'
+import { CohortConfig, CohortOption, useCohorts } from '@packages/frontend-shared/src/gql-components/composables/useCohorts'
+import { useSubscription } from '../graphql'
 
 const route = useRoute()
 const { t } = useI18n()
+const userProjectStatusStore = useUserProjectStatusStore()
 
 gql`
 fragment SpecsListBanners on Query {
@@ -172,16 +166,20 @@ fragment SpecsListBanners on Query {
     id
     projectId
     savedState
-    cloudProject {
-      __typename
-      ... on CloudProject {
-        id
-        runs(first: 1) {
-          nodes {
-            id
-          }
-        }
-      }
+    currentTestingType
+    config
+  }
+  machineId
+  wizard {
+    framework {
+      id
+      name
+      icon
+      type
+    }
+    bundler {
+      id
+      name
     }
   }
 }
@@ -213,7 +211,6 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'refetchFailedCloudData'): void
-  (e: 'reconnectProject'): void
 }>()
 
 useSubscription({ query: SpecsListBanners_CheckCloudOrgMembershipDocument })
@@ -223,15 +220,14 @@ const showOffline = ref(props.isOffline)
 const showFetchError = ref(props.isFetchError)
 const showProjectNotFound = ref(props.isProjectNotFound)
 const showProjectRequestAccess = ref(props.isProjectUnauthorized)
-const showRecordBanner = ref(false)
-const showConnectBanner = ref(false)
-const showCreateOrganizationBanner = ref(false)
-const showLoginBanner = ref(false)
 
-const hasRecordBannerBeenShown = ref(true)
-const hasConnectBannerBeenShown = ref(true)
-const hasCreateOrganizationBannerBeenShown = ref(true)
-const hasLoginBannerBeenShown = ref(true)
+const bannerIds = {
+  isLoggedOut: BannerIds.ACI_082022_LOGIN,
+  needsOrgConnect: BannerIds.ACI_082022_CREATE_ORG,
+  needsProjectConnect: BannerIds.ACI_082022_CONNECT_PROJECT,
+  needsRecordedRun: BannerIds.ACI_082022_RECORD,
+  isComponentTestingCandidate: BannerIds.CT_052023_AVAILABLE,
+} as const
 
 watch(
   () => ([props.isSpecNotFound, props.isOffline, props.isFetchError, props.isProjectNotFound, props.isProjectUnauthorized]),
@@ -244,44 +240,76 @@ watch(
   },
 )
 
-const cloudData = computed(() => ([props.gql.cloudViewer, props.gql.cachedUser, props.gql.currentProject] as const))
+const { getEffectiveBannerState } = usePromptManager()
 
-watch(
-  cloudData,
-  ([cloudViewer, cachedUser, currentProject]) => {
-    // Cached user covers state where we're authenticated but data isn't loaded yet
-    const isLoggedIn = !!cachedUser?.id || !!cloudViewer?.id
-    // Need to be able to tell whether the lack of `firstOrganization` means they don't have an org or whether it just hasn't loaded yet
-    // Not having this check can cause a brief flicker of the 'Create Org' banner while org data is loading
-    const isOrganizationLoaded = !!cloudViewer?.firstOrganization
-    const isMemberOfOrganization = (cloudViewer?.firstOrganization?.nodes?.length ?? 0) > 0
-    const isProjectConnected = !!currentProject?.projectId && currentProject.cloudProject?.__typename === 'CloudProject'
-    const hasNoRecordedRuns = currentProject?.cloudProject?.__typename === 'CloudProject' && (currentProject.cloudProject?.runs?.nodes?.length ?? 0) === 0
-    const hasFourDaysOfCypressUse = (Date.now() - currentProject?.savedState?.firstOpened) > interval('4 days')
+const bannerComponentToShow = computed(() => {
+  const componentsByStatus = {
+    isLoggedOut: LoginBanner,
+    needsOrgConnect: CreateOrganizationBanner,
+    needsProjectConnect: ConnectProjectBanner,
+    needsRecordedRun: RecordBanner,
+    isComponentTestingCandidate: ComponentTestingAvailableBanner,
+  }
 
-    showRecordBanner.value = !hasBannerBeenDismissed(BannerIds.ACI_082022_RECORD) && isLoggedIn && isProjectConnected && isMemberOfOrganization && isProjectConnected && hasNoRecordedRuns && hasFourDaysOfCypressUse
-    showConnectBanner.value = !hasBannerBeenDismissed(BannerIds.ACI_082022_CONNECT_PROJECT) && isLoggedIn && isMemberOfOrganization && !isProjectConnected && hasFourDaysOfCypressUse
-    showCreateOrganizationBanner.value = !hasBannerBeenDismissed(BannerIds.ACI_082022_CREATE_ORG) && isLoggedIn && isOrganizationLoaded && !isMemberOfOrganization && hasFourDaysOfCypressUse
-    showLoginBanner.value = !hasBannerBeenDismissed(BannerIds.ACI_082022_LOGIN) && !isLoggedIn && hasFourDaysOfCypressUse
+  const bannerStateToShow = getEffectiveBannerState('specsListBanner')
 
-    hasRecordBannerBeenShown.value = hasBannerBeenShown(BannerIds.ACI_082022_RECORD)
-    hasConnectBannerBeenShown.value = hasBannerBeenShown(BannerIds.ACI_082022_CONNECT_PROJECT)
-    hasCreateOrganizationBannerBeenShown.value = hasBannerBeenShown(BannerIds.ACI_082022_CREATE_ORG)
-    hasLoginBannerBeenShown.value = hasBannerBeenShown(BannerIds.ACI_082022_LOGIN)
-  },
-  { immediate: true },
-)
+  return bannerStateToShow ? componentsByStatus[bannerStateToShow] : null
+})
 
-function hasBannerBeenDismissed (bannerId: string) {
+const hasCurrentBannerBeenShown = computed(() => {
+  const bannerStateToShow = getEffectiveBannerState('specsListBanner')
   const bannersState = (props.gql.currentProject?.savedState as AllowedState)?.banners
+  const bannerId = bannerStateToShow && bannerIds[bannerStateToShow]
 
-  return !!bannersState?._disabled || !!bannersState?.[bannerId]?.dismissed
+  return !!bannersState?._disabled || (!!bannerId && !!bannersState?.[bannerId]?.lastShown)
+})
+
+type BannerKeys = keyof typeof BannerIds
+type BannerId = typeof BannerIds[BannerKeys]
+type BannerCohortOptions = Partial<Record<BannerId, CohortOption[]>>
+
+const bannerCohortOptions: BannerCohortOptions = {
+  [BannerIds.ACI_082022_LOGIN]: [
+    // Campaign ended in v12.4.0, see GH issue #24472
+    { cohort: '', value: t('specPage.banners.login.content') },
+  ],
+  [BannerIds.ACI_082022_CREATE_ORG]: [
+    // Campaign ended in v12.4.0, see GH issue #24472
+    { cohort: '', value: t('specPage.banners.createOrganization.title') },
+  ],
+  [BannerIds.ACI_082022_CONNECT_PROJECT]: [
+    // Campaign ended in v12.4.0, see GH issue #24472
+    { cohort: '', value: t('specPage.banners.connectProject.content') },
+  ],
 }
 
-function hasBannerBeenShown (bannerId: string) {
-  const bannersState = (props.gql.currentProject?.savedState as AllowedState)?.banners
+const cohortBuilder = useCohorts()
 
-  return !!bannersState?._disabled || !!bannersState?.[bannerId]?.lastShown
+const getCohortForBanner = (bannerId: BannerId): Ref<CohortOption | undefined> => {
+  const cohortConfig: CohortConfig = {
+    name: bannerId,
+    options: bannerCohortOptions[bannerId] || [],
+  }
+
+  return cohortBuilder.getCohort(cohortConfig)
 }
+
+const currentCohortOption = computed(() => {
+  if (!bannerCohortOptions[bannerIds[userProjectStatusStore.cloudStatus]]) {
+    return { cohort: null }
+  }
+
+  return reactive({ cohort: getCohortForBanner(bannerIds[userProjectStatusStore.cloudStatus]) })
+})
+
+const ctFramework = computed(() => {
+  return {
+    name: props.gql.wizard?.framework?.name,
+    type: props.gql.wizard?.framework?.type,
+    icon: props.gql.wizard?.framework?.icon,
+  }
+})
+
+const ctBundler = computed(() => props.gql.wizard?.bundler?.name)
 
 </script>
