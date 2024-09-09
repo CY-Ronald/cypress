@@ -21,7 +21,7 @@
   Fast, easy and reliable testing for anything that runs in a browser.
 </p>
 <p align="center">
-  Join us, we're <a href="https://cypress.io/jobs">hiring</a>.
+  Register for  🚀 <a href="https://cypress.registration.goldcast.io/events/d976c513-3bf1-4f6d-b83d-856c63b98f83#Registration/?utm_source=cypress_github&utm_medium=social&utm_campaign=cypressconf2024">Cypressconf 2024</a>.
 </p>
 
 <p align="center">
